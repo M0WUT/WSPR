@@ -16,9 +16,9 @@
 #define GPS Serial1
 #define PC Serial
 #define RPI Serial0
-#define SECOND 4e5
+#define SECOND 1200
 #define LED 1
-#define TIMEOUT 1*SECOND
+#define TIMEOUT 4e5
 #define TIMER_ENABLED 1""15
 #define NO_PRESCALER 0
 #define MODE_32_BIT_TIMER 1""3
