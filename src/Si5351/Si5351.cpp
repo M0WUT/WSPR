@@ -93,13 +93,13 @@ void Si5351::set_freq(uint8_t clock, uint8_t pll, double target_frequency)
 	double actual_output=resources[pll]/(a+(double)b/(double)c);
 	
 	#if TALKATIVE
-		Serial.print("Setting clock ");
-		Serial.print(clock);
-		Serial.print(" to ");
-		Serial.print(target_frequency,8);
-		Serial.print("Hz, actual frequency: ");
-		Serial.print(actual_output,8);
-		Serial.println("Hz");
+		PC.print("Setting clock ");
+		PC.print(clock);
+		PC.print(" to ");
+		PC.print(target_frequency,8);
+		PC.print("Hz, actual frequency: ");
+		PC.print(actual_output,8);
+		PC.println("Hz");
 	#endif
 	
 	uint32_t intermediate = (uint32_t)128.0*(double)b/(double)c; //To save calculating multiple times
@@ -196,23 +196,23 @@ void Si5351::set_PLL(uint8_t pll, uint64_t xtal_frequency, uint32_t target_pll_o
 	if(pll==PLL_A)
 	{
 		#if TALKATIVE 
-		Serial.print("Attempting to set PLL A to ");
+		PC.print("Attempting to set PLL A to ");
 		#endif
 	}
 	else if(pll==PLL_B)
 	{
 		#if TALKATIVE
-		Serial.print("Attempting to set PLL B to ");
+		PC.print("Attempting to set PLL B to ");
 		#endif
 	}
 	else panic("Invalid PLL Identifier");
 	
 	resources[pll]=actual_pll_output;
 	#if TALKATIVE
-	Serial.print(target_pll_output);
-	Serial.print("Hz, Actual Frequency: ");
-	Serial.print(actual_pll_output);
-	Serial.println("Hz");
+	PC.print(target_pll_output);
+	PC.print("Hz, Actual Frequency: ");
+	PC.print(actual_pll_output);
+	PC.println("Hz");
 	#endif
 	
 	

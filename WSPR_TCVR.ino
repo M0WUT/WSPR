@@ -15,11 +15,11 @@ bool calibration_flag, pi_rx_flag, state_initialised=0, editing_flag=0, warning 
 uint32_t calibration_value; //Contains the number of pulses from 2.5MHz ouput of Si5351 in 80 seconds (should be 200e6) 
 int substate=0;
 
-enum menu_state{START, UNCONFIGURED, UNLOCKED, HOME, PANIC, CALLSIGN, LOCATOR, POWER, POWER_WARNING, POWER_QUESTION, TX_PERCENTAGE, IP, BAND, OTHER_BAND_WARNING, OTHER_BAND_QUESTION, DATE_FORMAT};
+enum menu_state{START, UNCONFIGURED, UNLOCKED, HOME, PANIC, CALLSIGN, LOCATOR, POWER, POWER_WARNING, POWER_QUESTION, TX_PERCENTAGE, IP, BAND, OTHER_BAND_WARNING, OTHER_BAND_QUESTION, DATE_FORMAT, CALIBRATING};
 enum power_t{dbm0, dbm3, dbm7, dbm10, dbm13, dbm17, dbm20, dbm23, dbm27, dbm30, dbm33, dbm37, dbm40, dbm43, dbm47, dbm50, dbm53, dbm57, dbm60};
 enum band_t{BAND_160, BAND_80, BAND_60, BAND_40, BAND_30, BAND_20, BAND_17, BAND_15, BAND_12, BAND_10, BAND_OTHER};
 const String band_strings[] = {"160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "Other"}; 
-const int power_values[] = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30, 33, 37, 40, 43, 47, 50, 53, 57, 60};
+const String dbm_strings[] = {"0dBm", "3dBm", "7dBm", "10dBm", "13dBm", "17dBm", "20dBm", "23dBm", "27dBm", "30dBm", "33dBm", "37dBm", "40dBm", "43dBm", "47dBm", "50dBm", "53dBm", "57dBm", "60dBm"};
 const String watt_strings[] = {"1mW", "2mW", "5mW", "10mW", "20mW", "50mW", "100mW", "200mW", "500mW", "1W", "2W", "5W", "10W", "20W", "50W", "100W", "200W", "500W", "1kW"};
 enum date_t {BRITISH, AMERICAN, GLOBAL};
 const String date_strings[] = {"DD/MM/YY", "MM/DD/YY", "YY/MM/DD"};
@@ -36,16 +36,6 @@ uint32_t frequency = 136e3;
 
 void setup()
 {
-	/*T2CON = 0x00;
-	T3CON = 0x00;
-	TMR2 = 0x00;
-	PR2 = 0xFFFFFFFF;
-	T2CKR = PIN_2;
-	T2CON = (TIMER_ENABLED | NO_PRESCALER | MODE_32_BIT_TIMER | EXTERNAL_SOURCE);*/
-	//mine.begin(XTAL_10pF, 25000000,GPS_ENABLED);
-	//mine.set_freq(2,1,2500000.0);
-
- 
 	lcd.begin(DOG_LCD_M163);
 	lcd.noCursor();
 	GPS.begin(9600);
@@ -59,11 +49,11 @@ void setup()
 	pinMode(RPI_UART_PROD, OUTPUT);
 	digitalWrite(LED, LOW);
 	digitalWrite(RPI_UART_PROD, LOW);
-
+	
+	osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
+	
 	callsign.reserve(10);
 	locator.reserve(6);
-
-	attachInterrupt(GPS_PPS_INTERRUPT, check_frequency, RISING);
 }
 
 void lcd_write(int row, int col, String data)
@@ -154,6 +144,25 @@ void request_from_PI(String command, String &return_string, int max_length)
 
 void loop()
 {
+	if(calibration_flag) //GPS calibration has been updated 
+	{
+		#if DEBUG
+			PC.println(calibration_value);
+		#endif
+		static int error = 0;
+		if(abs(200e6 - calibration_value) > 10e3)
+		{
+			if(++error == 3) panic("GPS calibration failed");
+		}
+		else
+		{
+			osc.resources[0] = calibration_value <<2;
+			osc.resources[1] = calibration_value <<2;
+		}
+		calibration_value = 0;
+		calibration_flag = 0;
+	}
+	
 	switch (state) //going to attempt to implement as a state machine, sure M0IKY will have some complaints to make 
 	{
 		case START:
@@ -175,7 +184,7 @@ void loop()
 			{
 				lcd_write(0,1, "Not configured");
 				lcd_write(1,1, "Use webpage or");
-				lcd_write(2,2, "Press \"Menu\"");
+				lcd_write(2,2, "press \"Menu\"");
 				while(menu_pressed()) delay(50); //Wait for any previous button press to clear (written here so the display updates before debouncing)
 				state_initialised=1;
 			}
@@ -287,12 +296,18 @@ void loop()
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
 				lcd_write(0,4, "Locator");
-				if(!gps_enabled) lcd_write(1,0, locator);
-				else lcd_write(1,0, "Set by GPS");
-				if(editing_flag) lcd_write(2,0,blank_line);
-				else lcd_write(2,1, "GPS: Hold Edit");
+				if(!gps_enabled)
+				{
+					lcd_write(1,0, locator);
+					lcd_write(2,1, " GPS: Hold Edit ");
+				}
+				else 
+				{
+					lcd_write(1,0, "Set by GPS");
+					lcd_write(2,0, "Manual:Hold Edit");
+				}
+
 				while(menu_pressed()) delay(50);
-				while(edit_pressed())delay(50);
 				state_initialised=1;
 				break;
 			}
@@ -334,11 +349,25 @@ void loop()
 					if(++counter>(3*SECOND))
 					{
 						gps_enabled = !gps_enabled;
-						state_clean();
 						counter=0;
 						editing_flag=0;
-						if(editing_flag) lcd_write(2,0,blank_line);
-						else lcd_write(2,1, "GPS: Hold Edit");
+						
+						if(!gps_enabled)
+						{
+							lcd_write(1,0, blank_line);
+							lcd_write(1,0, locator);
+							lcd_write(2,0, " GPS: Hold Edit ");
+						}
+						else 
+						{
+							lcd_write(1,0, blank_line);
+							lcd_write(1,0, "Set by GPS");
+							lcd_write(2,0, "Manual:Hold Edit");
+						}
+						editing_flag = 0;
+						lcd.noBlink();
+						lcd.noCursor();
+						while(edit_pressed())delay(50);
 						goto end;
 					}
 				}
@@ -385,7 +414,7 @@ void loop()
 			{
 				lcd_write(0,5, "Power");
 				lcd_write(1,0, watt_strings[power]);
-				lcd_write(1, 13-((String)power).length(), ((String)power+"dBm"));
+				lcd_write(1, 16-(dbm_strings[power].length()), dbm_strings[power]);
 				while(menu_pressed()) delay(50);
 				state_initialised=1;
 			}
@@ -435,7 +464,7 @@ void loop()
 			{
 				lcd_write(0,5, "Power");
 				lcd_write(1,0, watt_strings[power]);
-				lcd_write(1, 13-((String)power).length(), ((String)power+"dBm"));
+				lcd_write(1, 16-(dbm_strings[power].length()), dbm_strings[power]);
 				while(menu_pressed()) delay(50);
 				state_initialised=1;
 			}
@@ -453,7 +482,7 @@ void loop()
 				else power=dbm0;
 				lcd_write(1,0,blank_line);
 				lcd_write(1,0, watt_strings[power]);
-				lcd_write(1, 13-((String)power).length(), ((String)power+"dBm"));
+				lcd_write(1, 16-(dbm_strings[power].length()), dbm_strings[power]);
 				while(edit_pressed())delay(50);
 			}
 			
@@ -462,7 +491,6 @@ void loop()
 		
 		case TX_PERCENTAGE:
 		{
-			
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
 				lcd_write(0,1, "TX Percentage");
@@ -584,15 +612,33 @@ void loop()
 				{
 					case 0: //Not editing frequency so move to next menu screen
 					{
-						state_clean();
+						
 						frequency = 0;
 						for (int i = 0; i<8; i++)
 						{
 							frequency *= 10;
-							frequency += frequency_char[i];
+							frequency += (frequency_char[i]-'0');
 						}
-						state = DATE_FORMAT;
-						goto end;
+						Serial.print(frequency);
+						if(frequency < 500e3)
+						{
+							for (int i =0; i<3; i++)
+							{
+								lcd_write(2,0,blank_line);
+								delay(400);
+								lcd_write(2,0,"Must be >500kHz");
+								delay(400);
+							}
+							lcd_write(2,0,blank_line);
+						}
+						else
+						{
+							state_clean();
+							state = DATE_FORMAT;
+							goto end;
+						}
+						
+						break;
 					}
 					
 					case 1: //Editing frequency so move cursor to next character
@@ -689,7 +735,7 @@ void loop()
 			if(digitalRead(GPS_PPS))
 			{
 				state_clean();
-				state = HOME;
+				state = CALIBRATING;
 				goto end;
 			}
 			
@@ -703,6 +749,78 @@ void loop()
 			break;
 		}	
 		
+		case CALIBRATING:
+		{
+			if(!state_initialised)
+			{
+				osc.set_freq(2,1,2500000.0);
+				lcd_write(0,2, "Calibrating");
+				lcd_write(1,1, "This will take");
+				lcd_write(2,0, "about 160 second");
+				T2CON = 0x00;
+				T3CON = 0x00;
+				TMR2 = 0x00;
+				PR2 = 0xFFFFFFFF;
+				T2CKR = PIN_A0;
+				T2CON = (TIMER_ENABLED | NO_PRESCALER | MODE_32_BIT_TIMER | EXTERNAL_SOURCE);
+				attachInterrupt(GPS_PPS_INTERRUPT, check_frequency, RISING);
+				state_initialised = 1;
+				while(menu_pressed()) delay(50); //Wait for any previous button press to clear (written here so the display updates before debouncing)
+			}
+		
+			static int i = 160;
+			static int counter = 0;
+			
+			if(++counter > SECOND) //nicer way of doing it than using delay as state machines don't like blocking
+			{
+				if(i>0) i--;
+				counter = 0;
+				lcd.setCursor(2,6);
+				if(i<100) lcd.print('0');
+				if(i<10) lcd.print('0');
+				lcd.print(i);
+			}
+		
+			if(calibration_flag) //Calibration complete
+			{
+				if(substate == 0) //First reading is always wrong for some reason
+				{
+					calibration_value = 0;
+					calibration_flag = 0;
+					substate = 1;
+				}
+				else
+				{
+					static int error = 0;
+					if(abs(200e6 - calibration_value) > 10e3)
+					{
+						if(++error == 3) panic("GPS calibration failed");
+						else
+						{
+							if(error == 1) lcd_write(0,0, "1st");
+							else lcd_write(0,0, "2nd");
+							lcd_write(0,3, " calibration ");
+							lcd_write(1,0, "failed. Retry in");
+							i=80;
+							counter = 0;
+						}
+					}
+					else
+					{
+						osc.resources[0] = calibration_value <<2;
+						osc.resources[1] = calibration_value <<2;
+						state_clean();
+						state = HOME;
+						goto end;
+					}
+					calibration_value = 0;
+					calibration_flag = 0;
+				}
+			}
+			
+			break;
+		}//end of CALIBRATING
+			
 		case HOME:
 		{
 			static String new_locator;
@@ -712,7 +830,32 @@ void loop()
 				lcd_write(0,0, callsign);
 				lcd_write(0,10, locator);
 				if(band != BAND_OTHER) lcd_write(1,0, band_strings[band]);
-				else ; //TODO show other nicely
+				else
+				{
+					lcd.setCursor(1,0);
+					
+					//frequency is abcdefgh Hz
+					if(frequency_char[0] > '0') //frequency has 10s of MHz, show (ab)MHZ
+					{
+						lcd.print(frequency_char[0]);
+						lcd.print(frequency_char[1]);
+						lcd.print("MHz");
+					}
+					else if(frequency_char[1] > '0') //show (b.c)MHz
+					{
+						lcd.print(frequency_char[1]);
+						lcd.print('.');
+						lcd.print(frequency_char[2]);
+						lcd.print("MHz");
+					}
+					else //show (cde)kHz
+					{
+						lcd.print(frequency_char[2]);
+						lcd.print(frequency_char[3]);
+						lcd.print(frequency_char[4]);
+						lcd.print("kHz");
+					}
+				}
 				lcd_write(1,7, watt_strings[power]);
 				
 				while(menu_pressed()) delay(50);

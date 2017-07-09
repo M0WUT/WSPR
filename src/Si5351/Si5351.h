@@ -27,7 +27,7 @@ enum si5351_capacitance {NA, XTAL_6pF, XTAL_8pF, XTAL_10pF};
 #define PLL_A 0
 #define PLL_B 1
 
-#define TALKATIVE 0
+#define TALKATIVE 1
 
 
 class Si5351
