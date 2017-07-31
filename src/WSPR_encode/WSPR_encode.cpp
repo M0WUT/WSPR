@@ -13,7 +13,7 @@ static int mix(uint32_t x, uint32_t k)
 	return(((x)<<(k)) | ((x)>>(32-(k))));
 }
 
-static int WSPR_hash(char *callsign, uint8_t callsign_length, DogLcd lcd)
+static int WSPR_hash(char *callsign, uint8_t callsign_length)
 {
 	uint32_t a,b,c;
 	a = 0xdeadbeef + (uint32_t)callsign_length + 146; //At this point, you should know better than to ask why
@@ -33,8 +33,8 @@ static int WSPR_hash(char *callsign, uint8_t callsign_length, DogLcd lcd)
 		case 3 : 	a+=((uint32_t)callsign[2])<<16;
 		case 2 : 	a+=((uint32_t)callsign[1])<<8;
 		case 1 : 	a+=callsign[0]; break;
-		case 0 : 	panic(lcd, "Zero length callsign supplied", 15);
-		default: 	panic(lcd, "Callsign too long", 17);
+		case 0 : 	return 15;
+		default: 	return 17;
     }
 	c ^= b; c -= mix(b,14); 
 	a ^= c; a -= mix(c,11); 
@@ -79,7 +79,7 @@ static int is_loc_char(char x) //Locator characters constrained to A-R
 
 static int is_sub_loc_char(char x) //Subsquare Locator characters constrained to A-X
 {
-	if (x>='A' && x<='X') return 1;
+	if (x>='a' && x<='x') return 1;
 	else return 0;
 }
 
@@ -89,7 +89,7 @@ int isnum(char x)
 	else return 0;
 }
 
-int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, WSPR_mode encoding_mode, DogLcd lcd)
+int WSPR::encode(String callsign, String locator, int power, char *wspr_symbols, WSPR_mode encoding_mode)
 {
 
 	/////////////////////////////////
@@ -110,7 +110,7 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 	
 	if (encoding_mode == WSPR_EXTENDED)
 	{ 
-		if(!is_loc_char(locator[4])) panic(lcd, "Must supply a 6 digit locator for extended mode", 1);
+		if(!is_loc_char(locator[4])) return 1;
 		for (int i =0; i<11; i++)
 		{
 			if(callsign[i] == '\0')
@@ -119,10 +119,13 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 				break;
 			}
 			stored_callsign[i]=callsign[i]; //Copy callsign to stored_callsign
-			if (i==10) panic(lcd, "Callsign not null terminated", 2);
+			if (i==10) return 2;
 		}
 		
 		//Replace callsign with modified locator as discussed above
+		locator[4] -=32; //Convert to capital in ASCII
+		locator[5] -=32;
+		
 		for (int i=0; i<5; i++)
 		{
 			callsign[i]=locator[i+1];
@@ -131,21 +134,21 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 		callsign[6] = '\0';
 	}
 	
-	//Check callsign is less than or equal to 11 characters (Can be at most 3 prefix characters, a '/', 6 character callsign and NULL termination
+	//Check callsign is less than or equal to 11 characters (Can be at most 3 prefix characters, a '/', 6 character callsign and NULL termination)
 	for(int i =0; i<11; i++)
 	{
 		if(callsign[i]=='\0') //Have reached end
 		{
 			callsign_length=i;
-			if (i==0) panic(lcd, "Zero length callsign", 16);
+			if (i==0) return 16;
 			break;
 		}
 		if(callsign[i]=='/') //Have to use extended protocol
 		{
-			if (slash_location > 0) panic(lcd, "Only 1 '/' is allowed in callsign", 3); 
+			if (slash_location > 0) return 3; 
 			slash_location=i;
 		}
-		if((i==10) || (slash_location==0 && i==6)) panic(lcd, "Callsign is too long", 4);
+		if((i==10) || (slash_location==0 && i==6)) return 4;
 	}
 	
 	if(slash_location == 0)
@@ -164,7 +167,7 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 		mode = SINGLE_SUFFIX;
 		callsign_length -= 2; //Remove length due to suffix from callsign_length
 		if(isnum(callsign_modifier[0]) || ischar(callsign_modifier[0]));
-		else panic(lcd, "Invalid character in suffix", 5);
+		else return 5;
 		for(int i = 0; i<slash_location; i++) //Copy the main body of the callsign to trimmed_callsign
 		{
 			trimmed_callsign[i]=callsign[i];
@@ -177,7 +180,7 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 		mode = DOUBLE_SUFFIX;
 		callsign_length -= 3; //Remove length due to suffix from callsign_length
 		if(isnum(callsign_modifier[0]) && isnum(callsign_modifier[1])); //Check both are numbers
-		else panic(lcd, "Invalid character in suffix, two character suffixes must both be numbers",6);
+		else return 6;
 		for(int i = 0; i<slash_location; i++) //Copy the main body of the callsign to trimmed_callsign
 		{
 			trimmed_callsign[i]=callsign[i];
@@ -197,7 +200,7 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 			{
 				callsign_modifier[i+3-slash_location]=callsign[i];
 			}
-			else panic(lcd, "Invalid character in Prefix", 7);
+			else return 7;
 		}
 		for (int i = slash_location + 1; i<callsign_length; i++)
 		{
@@ -206,11 +209,7 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 		callsign_length -= slash_location;
 		callsign_length -= 1;
 	}
-	else panic(lcd, "'/' Character used in unsupported mode", 8);
-	
-	
-	
-	
+	else return 8;
 	
 	
 	//Check all characters in main body of the callsign are number or capital letters
@@ -222,8 +221,7 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 		}
 		else
 		{
-			panic(lcd, "Invalid character found in callsign",9);
-			return 0;
+			return 9;
 		}
 	}
 	
@@ -240,7 +238,7 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 		}
 		else
 		{
-			panic(lcd, "Invalid Callsign. Need number as 2nd or 3rd character", 10);
+			return 10;
 			return 0;
 		}
 	}
@@ -257,7 +255,7 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 	
 	for(int i =3; i<6; i++)
 	{
-		if(isnum(prepped_callsign[i])) panic(lcd, "Last three characters of space padded callsign must not be numbers", 11); //Enforced by the WSPR spec
+		if(isnum(prepped_callsign[i])) return 11; //Enforced by the WSPR spec
 	}
 	
 	///////////////////
@@ -287,8 +285,7 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 	}
 	else
 	{
-		panic(lcd, "Invalid power entered, must be entered in dBm and end in 0,3 or 7 and be range 0-60", 12);
-		return 0;
+		return 12;
 	}
 	////////////////////////////////
 	//Prepare locator for encoding//
@@ -304,7 +301,7 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 	
 	if((is_loc_char(locator[0]) && is_loc_char(locator[1]) && isnum(locator[2]) && isnum(locator[3]) && ((locator_length==4) || ((locator_length==6) && is_sub_loc_char(locator[4]) && is_sub_loc_char(locator[5]))))==0)
 	{
-		panic(lcd, "Invalid locator", 13);
+		return 13;
 	}
 	
 
@@ -359,11 +356,11 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 							second_part = 128 * second_part + (uint32_t)power + 64;
 							break;
 							
-		case HASH:			second_part = WSPR_hash(stored_callsign, stored_callsign_length, lcd);
+		case HASH:			second_part = WSPR_hash(stored_callsign, stored_callsign_length);
 							second_part = 128 * second_part - (uint32_t)(power+1) + 64;
 							break;
 							
-		default:			panic(lcd, "Help :(", 14); break;
+		default:			return 14;
 	}
 	
 	///////////////////
@@ -465,7 +462,7 @@ int WSPR::encode(char *callsign, char *locator, int power, char *wspr_symbols, W
 		Serial.println("WSPR Encoding successful");
 	#endif
 	if (mode == NORMAL) return 0;
-	else return 1;
+	else return 21;
 }
 
 

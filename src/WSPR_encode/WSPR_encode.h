@@ -13,10 +13,11 @@
 
 #include "../panic/panic.h"
 #include "../DogLcd/DogLcd.h"
+#include "WSPR_config.h"
 
 enum WSPR_mode {WSPR_NORMAL=0, WSPR_EXTENDED=1};
 namespace WSPR{
-	int encode(char *callsign, char *locator, int power, char *wspr_symbols, WSPR_mode encoding_mode, DogLcd lcd);
+	int encode(String callsign, String locator, int power, char *wspr_symbols, WSPR_mode encoding_mode);
 	/*
 	callsign: pointer to array/string containing callsign for TX/RX with letters in UPPERCASE and numbers as ASCII
 	locator: pointer to 4 or 6 character Maidenhead locater with letters in UPPERCASE and numbers as ASCII

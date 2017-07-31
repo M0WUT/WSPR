@@ -8,8 +8,11 @@
 class LC640
 {
 	public:
-		void write(uint16_t address, uint8_t data, int cs = 1);
-		int read(uint16_t address, int cs = 1);
+		void write(uint16_t address, uint8_t data);
+		int read(uint16_t address);
 		LC640(int cs = 1);
+		
+	private:
+		int cs;
 };
 #endif

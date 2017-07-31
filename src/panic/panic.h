@@ -10,9 +10,13 @@
  #include "WProgram.h"
 #endif
 
-#include <WSPR_config.h>
+#include "../DogLcd/DogLcd.h"
+#include "WSPR_config.h"
 
-void panic(DogLcd lcd, String message, uint8_t error_code);
+
+
+void panic(String message, uint8_t error_code);
 void panic(String message);
+void register_lcd_for_panic(DogLcd *new_lcd);
 
 #endif

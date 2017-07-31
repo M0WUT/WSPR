@@ -43,11 +43,11 @@ void Si5351::stopTransmission()
 {
 	switch(Wire2.endTransmission())
 		{
-			/*case 0: break;
-			case 1: panic("Data does not fit in TX buffer"); break;
-			case 2: panic("I2C device not responding"); break;
-			case 3: panic("I2C responding but not acknowledging data"); break;
-			default: panic("Unrecognised I2C error, WTF did you do??");*/
+			//case 0: break;
+			//case 1: panic("Data does not fit in TX buffer"); break;
+			//case 2: panic("I2C device not responding"); break;
+			//case 3: panic("I2C responding but not acknowledging data"); break;
+			//default: panic("Unrecognised I2C error, WTF did you do??");
 			default: break;
 		}
 }

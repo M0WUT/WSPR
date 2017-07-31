@@ -8,6 +8,7 @@
 #endif
 
 #include "../Wire2/Wire2.h"
+#include "WSPR_config.h"
 
 #define Si5351_ADDRESS 0b1100000
 

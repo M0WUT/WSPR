@@ -4,7 +4,7 @@
 
 #include "src/WSPR_encode/WSPR_encode.h"
 #include "src/Si5351/Si5351.h"
-#include "src/TinyGPS++/TinyGPS++.h"
+#include "src/TinyGPS/TinyGPS.h"
 #include "src/panic/panic.h"
 #include "src/DogLcd/DogLcd.h"
 #include "src/maidenhead/maidenhead.h"
@@ -19,7 +19,7 @@
 #define HOME_SECOND 1200
 #define SECOND 4e5
 #define LED 1
-#define TIMEOUT 4e5
+#define TIMEOUT 5*SECOND
 #define TIMER_ENABLED 1<<15
 #define NO_PRESCALER 0
 #define MODE_32_BIT_TIMER 1<<3
@@ -36,6 +36,7 @@
 //////////////////////
 
 #define DEBUG 1 //set to 0 for normal mode
+#define SKIP_CALIBRATION 1
 
 
 
