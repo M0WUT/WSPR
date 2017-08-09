@@ -36,7 +36,7 @@ void panic(String message, uint8_t error)
 		case 0:  lcd_message =  ""; break;
 		
 		case 18: lcd_message = 	"     Pi not        responding       Error 18    "; break;
-		case 19: lcd_message = 	"Received unknown character from Pi  Error 19    "; break;
+		case 19: lcd_message = 	"Received unknown character          Error 19    "; break;
 		case 20: lcd_message = 	"  Calibration    Signal Invalid     Error 20    "; break;
 		case 22: lcd_message =  " Something went wrong. Send Help    Error 22    "; break;
 	};

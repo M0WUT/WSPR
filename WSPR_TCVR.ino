@@ -128,15 +128,14 @@ bool edit_pressed()
 	return !digitalRead(EDIT_BTN);
 }
 
-void request_from_PI(String command, String &return_string, int max_length)
+void request_from_PI(char command, String &return_string, int max_length)
 {
 	while(RPI.available()) RPI.read();
 	return_string="";
-	RPI.print(command+";\n"); //Send the request to the PI
+	RPI.print(command); //Send the request to the PI
+	RPI.print(";\n");
 	while(!RPI.available()) {static int counter = 0; counter++; if (counter==TIMEOUT) panic("No response from Pi",18);}
-	if(RPI.read() != command[0]) panic("Unexpected character received from Pi", 19);
-	while(!RPI.available()) {static int counter = 0; counter++; if (counter==TIMEOUT) panic("No response from Pi",18);}
-	if(RPI.read() != command[1]) panic("Unexpected character received from Pi", 19);
+	if(RPI.read() != command) panic("Unexpected character received from Pi", 19);
 	while(!RPI.available()) {static int counter = 0; counter++; if (counter==TIMEOUT) panic("No response from Pi",18);}
 	char x;
 	for(int i = 0; i < max_length; i++)
@@ -146,6 +145,8 @@ void request_from_PI(String command, String &return_string, int max_length)
 		else break;
 		while(!RPI.available()) {static int counter = 0; counter++; if (counter==TIMEOUT) panic("No response from Pi",18);}
 	}
+	
+	
 }
 
 uint32_t tx (uint32_t currentTime)
@@ -507,7 +508,6 @@ void loop()
 			goto end;
 		}//end of LOCATOR_CHECK
 		
-		
 		case POWER:
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
@@ -626,9 +626,9 @@ void loop()
 				String data_received;
 				data_received.reserve(16);
 				lcd_write(0,0, "IP and Hostname");
-				request_from_PI("IP", data_received,16);
+				request_from_PI('I', data_received,16);
 				lcd_write(1,0, data_received);
-				request_from_PI("HO", data_received,16);
+				request_from_PI('H', data_received,16);
 				lcd_write(2,0,data_received);
 				while(menu_pressed()) delay(50);
 				while(edit_pressed())delay(50);
@@ -1170,7 +1170,51 @@ void loop()
 			
 		}//end of HOME	
 	} //end of state machine
-end:;
+end:
+	if(RPI.available())
+	{
+		char char1, char2;
+		String data = "";
+		data.reserve(50);
+		char1 = RPI.read();
+		while(!RPI.available()) {static int counter = 0; counter++; if (counter==TIMEOUT) panic("No response from Pi",18);}
+		char x;
+		for(int i = 0; i < 50; i++)
+		{
+			x = RPI.read();
+			if(x != ';') data += x;
+			else break;
+			while(!RPI.available()) {static int counter = 0; counter++; if (counter==TIMEOUT) panic("No response from Pi",18);}
+		}
+		
+		switch (char1)
+		{
+			case 'C': 
+						if(data == "")
+						{
+							RPI.print("C");
+							RPI.print(callsign);
+							RPI.print(";\n");
+						}
+						else
+						{
+							callsign = data;
+							state_clean();
+							state=CALLSIGN;
+						}
+						break;
+			default: panic("Unexpected character received from Pi", 19);
+							
+		};
+		
+		RPI.read();
+							
+							
+		
+		
+		
+		
+	}
 } //end of loop
 
 
