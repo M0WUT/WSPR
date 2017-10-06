@@ -37,7 +37,7 @@ class Si5351
 		void begin(si5351_capacitance xtal_cap, uint32_t xtal_freq, int32_t correction);
 		void disable_clock(uint8_t clock);
 		void set_freq(uint8_t clock, uint8_t pll, double target_frequency);
-		uint32_t resources[2];
+		uint32_t plla_frequency, pllb_frequency;
 		
 	private:
 		unsigned int bc_solve(double x0, uint64_t &num, uint64_t &den);

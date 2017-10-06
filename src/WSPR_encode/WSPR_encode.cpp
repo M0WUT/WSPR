@@ -186,7 +186,7 @@ int WSPR::encode(String callsign, String locator, int power, char *wspr_symbols,
 			trimmed_callsign[i]=callsign[i];
 		}
 	}
-	else if(slash_location<3)//1-3 letter prefix
+	else if(slash_location<4)//1-3 letter prefix
 	{
 		mode = PREFIX;
 		for(int i=0; i<3-slash_location; i++) //If prefix, it requires padding with spaces before the prefix to make it 3 characters

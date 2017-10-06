@@ -10,7 +10,7 @@ char symbols2[162]; //Used to store more WSPR symbols in case of extended mode
 
 Si5351 osc;
 TinyGPSPlus gps;
-DogLcd lcd(20, 21, 24, 22);
+DogLcd lcd(21, 20, 24, 22);
 bool calibration_flag, pi_rx_flag, state_initialised=0, editing_flag=0, warning = 0, gps_enabled=1, extended_mode = 0; //flags used to indicate to the main loop that an interrupt driven event has completed
 uint32_t calibration_value; //Contains the number of pulses from 2.5MHz ouput of Si5351 in 80 seconds (should be 200e6) 
 int substate=0;
@@ -19,22 +19,30 @@ enum menu_state{START, UNCONFIGURED, UNLOCKED, HOME, PANIC, CALLSIGN, CALLSIGN_C
 enum power_t{dbm0, dbm3, dbm7, dbm10, dbm13, dbm17, dbm20, dbm23, dbm27, dbm30, dbm33, dbm37, dbm40, dbm43, dbm47, dbm50, dbm53, dbm57, dbm60};
 enum band_t{BAND_160, BAND_80, BAND_60, BAND_40, BAND_30, BAND_20, BAND_17, BAND_15, BAND_12, BAND_10, BAND_OTHER};
 const String band_strings[] = {"160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "Other"}; 
-const String dbm_strings[] = {"0dBm", "3dBm", "7dBm", "10dBm", "13dBm", "17dBm", "20dBm", "23dBm", "27dBm", "30dBm", "33dBm", "37dBm", "40dBm", "43dBm", "47dBm", "50dBm", "53dBm", "57dBm", "60dBm"};
+const String dbm_strings[] = {"0", "3", "7", "10", "13", "17", "20", "23", "27", "30", "33", "37", "40", "43", "47", "50", "53", "57", "60"};
 const String watt_strings[] = {"1mW", "2mW", "5mW", "10mW", "20mW", "50mW", "100mW", "200mW", "500mW", "1W", "2W", "5W", "10W", "20W", "50W", "100W", "200W", "500W", "1kW"};
 const double band_freq[] = {1836600.0, 3592600.0, 5287200.0, 7038600.0, 10138700.0, 14095600.0, 18104600.0, 21094600.0, 24924600.0, 28124600.0};
 enum date_t {BRITISH, AMERICAN, GLOBAL};
+enum rx_state_t {RX_START, RX_CALLSIGN, RX_LOCATOR, RX_POWER, RX_BAND, RX_FREQUENCY, RX_TX_PERCENTAGE, RX_STATUS, RX_TIMESTAMP};
+
+									
 const String date_strings[] = {"DD/MM/YY", "MM/DD/YY", "YY/MM/DD"};
 const uint32_t wspr_tone_delay = (uint32_t)(256000.0 * (double)CORE_TICK_RATE/375.0);
 
 const char letters[] = {'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','0','1','2','3','4','5','6','7','8','9','/',' ','A'}; //the extra A means the index can be incremented from '/', next time it searches for 'A' it will returns 0 not 37 as it loops from the starts
 const String blank_line = "                ";
 menu_state state = START;
+String ip_address = "0.0.0.0";
+String hostname = "deadbeef";
 power_t power = dbm23;
+rx_state_t rx_state = RX_START;
+band_t band_array[24];
 band_t band = BAND_20;
 date_t date_format = BRITISH;
-char frequency_char[9] = {'0','0','1','3','6','0','0','0',0};
 uint32_t frequency = 136e3;
 double tx_frequency=0;
+int time_request = 0;
+
 
 
 void setup()
@@ -50,11 +58,9 @@ void setup()
 	pinMode(MENU_BTN, INPUT);
 	pinMode(EDIT_BTN, INPUT);
 	pinMode(LED, OUTPUT);
-	pinMode(RPI_UART_PROD, OUTPUT);
 	digitalWrite(LED, LOW);
-	digitalWrite(RPI_UART_PROD, LOW);
-	
-	osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
+
+	//osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
 	
 	callsign.reserve(10);
 	locator.reserve(6);
@@ -128,27 +134,6 @@ bool edit_pressed()
 	return !digitalRead(EDIT_BTN);
 }
 
-void request_from_PI(char command, String &return_string, int max_length)
-{
-	while(RPI.available()) RPI.read();
-	return_string="";
-	RPI.print(command); //Send the request to the PI
-	RPI.print(";\n");
-	while(!RPI.available()) {static int counter = 0; counter++; if (counter==TIMEOUT) panic("No response from Pi",18);}
-	if(RPI.read() != command) panic("Unexpected character received from Pi", 19);
-	while(!RPI.available()) {static int counter = 0; counter++; if (counter==TIMEOUT) panic("No response from Pi",18);}
-	char x;
-	for(int i = 0; i < max_length; i++)
-	{
-		x = RPI.read();
-		if(x != ';') return_string += x;
-		else break;
-		while(!RPI.available()) {static int counter = 0; counter++; if (counter==TIMEOUT) panic("No response from Pi",18);}
-	}
-	
-	
-}
-
 uint32_t tx (uint32_t currentTime)
 {
 	substate++;
@@ -169,8 +154,8 @@ void loop()
 		}
 		else
 		{
-			osc.resources[0] = calibration_value <<2;
-			osc.resources[1] = calibration_value <<2;
+			osc.plla_frequency = calibration_value <<2;
+			osc.pllb_frequency = calibration_value <<2;
 		}
 		calibration_value = 0;
 		calibration_flag = 0;
@@ -205,6 +190,8 @@ void loop()
 			if(menu_pressed())
 			{
 				state_clean();
+				RPI.print("I;\n");
+				RPI.print("H;\n");
 				state = IP;
 				goto end;
 			}
@@ -514,7 +501,7 @@ void loop()
 			{
 				lcd_write(0,5, "Power");
 				lcd_write(1,0, watt_strings[power]);
-				lcd_write(1, 16-(dbm_strings[power].length()), dbm_strings[power]);
+				lcd_write(1, 13-(dbm_strings[power].length()), dbm_strings[power]+"dBm");
 				while(menu_pressed()) delay(50);
 				state_initialised=1;
 			}
@@ -564,7 +551,7 @@ void loop()
 			{
 				lcd_write(0,5, "Power");
 				lcd_write(1,0, watt_strings[power]);
-				lcd_write(1, 16-(dbm_strings[power].length()), dbm_strings[power]);
+				lcd_write(1, 13-(dbm_strings[power].length()), dbm_strings[power]+"dBm");
 				while(menu_pressed()) delay(50);
 				state_initialised=1;
 			}
@@ -582,7 +569,7 @@ void loop()
 				else power=dbm0;
 				lcd_write(1,0,blank_line);
 				lcd_write(1,0, watt_strings[power]);
-				lcd_write(1, 16-(dbm_strings[power].length()), dbm_strings[power]);
+				lcd_write(1, 13-(dbm_strings[power].length()), dbm_strings[power]+"dBm");
 				while(edit_pressed())delay(50);
 			}
 			
@@ -623,13 +610,19 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
-				String data_received;
-				data_received.reserve(16);
+				//Ensure that this screen always shows live data by clearing IP and hostname and re-requesting them
 				lcd_write(0,0, "IP and Hostname");
-				request_from_PI('I', data_received,16);
-				lcd_write(1,0, data_received);
-				request_from_PI('H', data_received,16);
-				lcd_write(2,0,data_received);
+				static int counter = 0;
+				if(ip_address == "0.0.0.0" || hostname == "deadbeef") //Wait for defaults to be overwritten
+				{
+					//TODO find out what happens if not connected to network and implement error handling
+					if(++counter > TIMEOUT) panic("Pi not responding",19);
+					goto end;
+				}
+				
+				
+				lcd_write(1,0, ip_address);
+				lcd_write(2,0, hostname);
 				while(menu_pressed()) delay(50);
 				while(edit_pressed())delay(50);
 				state_initialised=1;
@@ -660,6 +653,7 @@ void loop()
 				state_clean();
 				if(band == BAND_OTHER) state = OTHER_BAND_WARNING;
 				else state = DATE_FORMAT;
+				for (int i =0; i<24; i++) band_array[i] = band;
 				goto end;	
 			}
 			
@@ -701,7 +695,8 @@ void loop()
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
 				lcd_write(0,1, "Enter VFO Freq");
-				lcd_write(1,0, frequency_char);
+				lcd.setCursor(1,0);
+				lcd.print(frequency);
 				while(menu_pressed()) delay(50);
 				state_initialised=1;
 			}
@@ -712,14 +707,6 @@ void loop()
 				{
 					case 0: //Not editing frequency so move to next menu screen
 					{
-						
-						frequency = 0;
-						for (int i = 0; i<8; i++)
-						{
-							frequency *= 10;
-							frequency += (frequency_char[i]-'0');
-						}
-						Serial.print(frequency);
 						if(frequency < 500e3)
 						{
 							for (int i =0; i<3; i++)
@@ -773,15 +760,10 @@ void loop()
 					
 					case 1: //Change current character (indexed by substate)
 					{
-						if(substate == 0)
-						{
-							if(++frequency_char[0] == '3') frequency_char[substate] = '0'; //Limiy maximum frequency to 29.999999MHz
-						}
-						else
-						{
-							if(++frequency_char[substate] == ':') frequency_char[substate] = '0';	
-						}
-						lcd_write(1,0, frequency_char);
+						frequency += pow(10,substate);
+						frequency = frequency%30000000;
+						lcd.setCursor(1,0);
+						lcd.print(frequency);
 						lcd.setCursor(1,substate);
 						break;
 					} 
@@ -936,8 +918,8 @@ void loop()
 					}
 					else
 					{
-						osc.resources[0] = calibration_value <<2;
-						osc.resources[1] = calibration_value <<2;
+						osc.plla_frequency = calibration_value <<2;
+						osc.pllb_frequency = calibration_value <<2;
 						state_clean();
 						maidenhead(gps, locator);
 						state = ENCODING;
@@ -979,24 +961,21 @@ void loop()
 					tx_frequency = frequency + 1400 + random(20,180);
 					
 					//frequency is abcdefgh Hz
-					if(frequency_char[0] > '0') //frequency has 10s of MHz, show (ab)MHZ
+					if(frequency >= 10e6 ) //frequency has 10s of MHz, show (ab)MHZ
 					{
-						lcd.print(frequency_char[0]);
-						lcd.print(frequency_char[1]);
+						lcd.print(frequency / 1000000);
 						lcd.print("MHz");
 					}
-					else if(frequency_char[1] > '0') //show (b.c)MHz
+					else if(frequency > 1e6) //show (b.c)MHz
 					{
-						lcd.print(frequency_char[1]);
+						lcd.print(frequency / 1000000);
 						lcd.print('.');
-						lcd.print(frequency_char[2]);
+						lcd.print((frequency / 100000) % 10);
 						lcd.print("MHz");
 					}
 					else //show (cde)kHz
 					{
-						lcd.print(frequency_char[2]);
-						lcd.print(frequency_char[3]);
-						lcd.print(frequency_char[4]);
+						lcd.print(frequency / 1000);
 						lcd.print("kHz");
 					}
 				}
@@ -1171,50 +1150,120 @@ void loop()
 		}//end of HOME	
 	} //end of state machine
 end:
+	//Deals with Pi communications
+	//Not a huge issue that this is blocking as successful messages will still be very quick relative to human
+	//any timing critical stuff (like tx tone timing) is interrupt driven and the timeout will be triggered if messages are not complete
+	
 	if(RPI.available())
 	{
-		char char1, char2;
-		String data = "";
-		data.reserve(50);
-		char1 = RPI.read();
-		while(!RPI.available()) {static int counter = 0; counter++; if (counter==TIMEOUT) panic("No response from Pi",18);}
-		char x;
-		for(int i = 0; i < 50; i++)
+		if(state == HOME && substate != 0 && substate != 165) //We are currently transmitting
 		{
-			x = RPI.read();
-			if(x != ';') data += x;
-			else break;
-			while(!RPI.available()) {static int counter = 0; counter++; if (counter==TIMEOUT) panic("No response from Pi",18);}
+			detachCoreTimerService(tx); //Stop the transmission, who cares if we stop mid transmission as we are probably changing settings
+			osc.disable_clock(0);
+			substate = 0;
+		}
+		String rx_string = "";
+		rx_string.reserve(20);
+		char x = RPI.read();
+		while(x != '\n')
+		{
+			rx_string += x;
+			for(int counter = 0; !RPI.available(); ++counter)
+				if(counter > TIMEOUT) panic("Pi not responding", 18);
+			x = RPI.read();	
 		}
 		
-		switch (char1)
+		int rx_string_length = rx_string.length();
+		int terminator_index = rx_string.indexOf(';');
+		if(rx_string_length != (terminator_index +1)) panic("Command not ; terminated"); //This also handles no ; present as indexOf returns -1 if not found and length != 0
+		
+		if(rx_string_length == 2) //We are being requested data from
 		{
-			case 'C': 
-						if(data == "")
-						{
-							RPI.print("C");
-							RPI.print(callsign);
+			switch(rx_string[0])
+			{
+				case 'C': 	RPI.print("C"+callsign+";\n"); break;
+				case 'L': 	RPI.print("L"+locator+";\n"); break;
+				case 'P': 	RPI.print("P"+dbm_strings[power]+";\n"); break;
+				case 'B':	RPI.print('B');
+							for(int i =0; i<23; i++)
+							{
+								RPI.print(band_array[i]);
+								RPI.print(',');
+							}
+							RPI.print(band_array[23]);
 							RPI.print(";\n");
-						}
-						else
-						{
-							callsign = data;
-							state_clean();
-							state=CALLSIGN;
-						}
-						break;
-			default: panic("Unexpected character received from Pi", 19);
+							break;
 							
-		};
-		
-		RPI.read();
+				case 'F': 	RPI.print("F");
+							RPI.print(frequency);
+							RPI.print(";\n");
+							break;
 							
 							
-		
-		
-		
-		
+				case 'X':  	RPI.print("X");
+							RPI.print(tx_percentage);
+							RPI.print(";\n");
+							break;
+				case 'T':	if(!gps_enabled) panic("PI requesting time and GPS is disabled");
+							RPI.print("T");
+							RPI.print(gps.date.day());
+							RPI.print("/");
+							RPI.print(gps.date.month());
+							RPI.print("/");
+							RPI.print(gps.date.year());
+							RPI.print(" ");
+							RPI.print(gps.time.hour());
+							RPI.print(":");
+							RPI.print(gps.time.minute());
+							RPI.print(":");
+							RPI.print(gps.time.second());
+							RPI.print(";\n");
+							break;
+							
+				default: panic("Received unknown character from Pi", 19);
+							
+
+			};
+		}
+		else //We are setting data
+		{
+			String data = rx_string.substring(1, terminator_index); //strip off command stuff
+			switch (rx_string[0])
+			{
+				case 'C': 	callsign = data; break;
+				case 'I': 	ip_address = data; break;
+				case 'H': 	hostname = data; break;
+				case 'L': 	locator = data; break;
+				case 'P': 	for (int i =0; i< 19; i++)
+							{
+								if(dbm_strings[i] == data)
+								{
+									power = (power_t)i;
+									break;
+								}
+							}
+							panic("Invalid power specified");
+							break;
+				case 'B': 	for (int i = 0; i<24; i++)
+							{
+								int x = data[2*i] - '0'; //2*i as comma seperated, then converted to int
+								if (x>=0 and x <12) band_array[i] = (band_t)x;
+								else panic("Invalid band supplied");
+							}
+							break;
+				case 'F': 	frequency = atoi(data.c_str()); break;
+				case 'X':	tx_percentage = atoi(data.c_str()); break;
+				default: 	panic("Unexpected char received from Pi", 19);
+							
+					
+				
+				
+				
+			};	
+			state_initialised = 0; //Re-initialise the state in case information has changed
+		}
 	}
+actual_end:;
 } //end of loop
 
 

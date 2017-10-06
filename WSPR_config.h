@@ -27,7 +27,6 @@
 #define GPS_PPS 0
 #define GPS_PPS_INTERRUPT 2
 #define PIN_A0 0
-#define RPI_UART_PROD 7
 #define MENU_BTN 16
 #define EDIT_BTN 13
 
@@ -38,7 +37,10 @@
 #define DEBUG 1 //set to 0 for normal mode
 #define SKIP_CALIBRATION 1
 
+/////////////////////////
+//User adjustable stuff//
+/////////////////////////
 
-
+#define LCD_CONTRAST 0x28
 
 

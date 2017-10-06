@@ -1,10 +1,8 @@
 #include "Si5351.h"
-#include "../panic/panic.h"
+
 
 // I am aware that this code uses a lot of unhelpful single letter variables which I normally consider poor style.
 // This was done so that the naming of values is consistent with the Silicon Labs AN619, detailing how to program the Si5351
-
-uint32_t resources[2]; //[plla_frequency, pllb_frequency]
 
 unsigned int Si5351::bc_solve(double x0, uint64_t &num, uint64_t &den)
 {
@@ -71,26 +69,33 @@ uint8_t Si5351::I2C_read(uint8_t address)
 
 void Si5351::set_freq(uint8_t clock, uint8_t pll, double target_frequency)
 {
-	if(pll>1) panic("Invalid PLL selected");
+
 	if(clock>2) panic("Invalid output selected");
-	//Output frequency = VCO freq (stored in resources[pll]) / (a+b/c)
+	//Output frequency = PLL Frequency / (a+b/c)
 	//so a+b/c = VCO frequency / target frequency
 	double a;
 	uint64_t b,c;
 
-	
-	a=resources[pll]/target_frequency;
-	a=floor(a);
+	double pll_frequency;
+	switch(pll)
+	{
+		case PLL_A: pll_frequency = this->plla_frequency; break;
+		case PLL_B: pll_frequency = this->pllb_frequency; break;
+		default: panic("Invalid PLL specified");		
+	};
 
+	
+	a = floor(pll_frequency / target_frequency);
+	
 	if(a<6 | a>1800 | ((a==1800) & (b>0))) panic("Target output frequency produced invalid multipliers");
 	
-	double remainder = resources[pll] - (target_frequency * a);
+	double remainder = pll_frequency - (target_frequency * a);
 	remainder /= target_frequency;
 	
 	bc_solve(remainder, b, c); // Function to convert remainder to best fit fraction
 	
 	//Calculate actual output frequency
-	double actual_output=resources[pll]/(a+(double)b/(double)c);
+	double actual_output=pll_frequency/(a+(double)b/(double)c);
 	
 	#if TALKATIVE
 		PC.print("Setting clock ");
@@ -195,19 +200,20 @@ void Si5351::set_PLL(uint8_t pll, uint64_t xtal_frequency, uint32_t target_pll_o
 	
 	if(pll==PLL_A)
 	{
+		this->plla_frequency = actual_pll_output;
 		#if TALKATIVE 
 		PC.print("Attempting to set PLL A to ");
 		#endif
 	}
 	else if(pll==PLL_B)
 	{
+		this->pllb_frequency = actual_pll_output;
 		#if TALKATIVE
 		PC.print("Attempting to set PLL B to ");
 		#endif
 	}
 	else panic("Invalid PLL Identifier");
 	
-	resources[pll]=actual_pll_output;
 	#if TALKATIVE
 	PC.print(target_pll_output);
 	PC.print("Hz, Actual Frequency: ");
