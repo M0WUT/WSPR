@@ -13,6 +13,7 @@ void panic(String message)
 	digitalWrite(1, HIGH);
 	PC.print("\r\nERROR: ");
 	PC.println(message);
+	RPI.print("S"+message+";\n");
 	
 	while(1)
 	{

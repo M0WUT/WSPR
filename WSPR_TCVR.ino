@@ -180,6 +180,7 @@ void loop()
 		{
 			if(!state_initialised)
 			{
+				RPI.print("SUnconfigured;\n");
 				lcd_write(0,1, "Not configured");
 				lcd_write(1,1, "Use webpage or");
 				lcd_write(2,2, "press \"Menu\"");
@@ -203,6 +204,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				RPI.print("SInputting Callsign;\n");
 				lcd_write(0,4, "Callsign");
 				lcd_write(1,0, callsign);
 				while(menu_pressed()) delay(50);
@@ -339,6 +341,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				RPI.print("SInputting Locator;\n");
 				lcd_write(0,4, "Locator");
 				if(!gps_enabled)
 				{
@@ -499,6 +502,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				RPI.print("SInputting Power;\n");
 				lcd_write(0,5, "Power");
 				lcd_write(1,0, watt_strings[power]);
 				lcd_write(1, 13-(dbm_strings[power].length()), dbm_strings[power]+"dBm");
@@ -580,6 +584,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				RPI.print("SSetting TX Percentage;\n");
 				lcd_write(0,1, "TX Percentage");
 				lcd_write(1,0, ((String)tx_percentage+"%"));
 				while(menu_pressed()) delay(50);
@@ -610,6 +615,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				
 				//Ensure that this screen always shows live data by clearing IP and hostname and re-requesting them
 				lcd_write(0,0, "IP and Hostname");
 				static int counter = 0;
@@ -623,6 +629,7 @@ void loop()
 				
 				lcd_write(1,0, ip_address);
 				lcd_write(2,0, hostname);
+				RPI.print("SDisplaying connection info;\n");
 				while(menu_pressed()) delay(50);
 				while(edit_pressed())delay(50);
 				state_initialised=1;
@@ -642,6 +649,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				RPI.print("SSetting band;\n");
 				lcd_write(0,6, "Band");
 				lcd_write(1,0, band_strings[band]);
 				while(menu_pressed()) delay(50);
@@ -778,6 +786,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				RPI.print("SSetting date format;\n");
 				lcd_write(0,2, "Date Format");
 				lcd_write(1,0, date_strings[date_format]);
 				while(menu_pressed()) delay(50);
@@ -807,6 +816,7 @@ void loop()
 		{
 			if(!state_initialised)
 			{
+				RPI.print("SWaiting for GPS lock;\n");
 				lcd_write(0,0, "Waiting for GPS");
 				lcd_write(1,2, "Lock. Press");
 				lcd_write(2,1, "\"Menu\" to skip");
@@ -864,6 +874,7 @@ void loop()
 		{
 			if(!state_initialised)
 			{
+				RPI.print("SCalibrating - roughly 160 seconds remaining;\n");
 				osc.set_freq(2,1,2500000.0);
 				lcd_write(0,2, "Calibrating");
 				lcd_write(1,1, "This will take");
@@ -890,6 +901,9 @@ void loop()
 				if(i<100) lcd.print('0');
 				if(i<10) lcd.print('0');
 				lcd.print(i);
+				RPI.print("SCalibrating - roughly ");
+				RPI.print(i);
+				RPI.print(" seconds remaining;\n");
 			}
 		
 			if(calibration_flag) //Calibration complete
@@ -905,7 +919,7 @@ void loop()
 					static int error = 0;
 					if(abs(200e6 - calibration_value) > 10e3)
 					{
-						if(++error == 3) panic("Invalid calbiration signal", 20);
+						if(++error == 3) panic("Invalid calibration signal", 20);
 						else
 						{
 							if(error == 1) lcd_write(0,0, "1st");
@@ -936,6 +950,7 @@ void loop()
 		case HOME:
 		{
 			static String new_locator;
+			String freq_string = "";
 			static uint32_t gps_watchdog = 0;
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
@@ -951,6 +966,7 @@ void loop()
 				
 				if(band != BAND_OTHER)
 				{
+					freq_string = band_strings[band];
 					lcd_write(1,0, band_strings[band]);
 					tx_frequency = band_freq[band] + 1400 + random(20,180);
 				}
@@ -960,26 +976,16 @@ void loop()
 					lcd.setCursor(1,0);
 					tx_frequency = frequency + 1400 + random(20,180);
 					
+					
 					//frequency is abcdefgh Hz
-					if(frequency >= 10e6 ) //frequency has 10s of MHz, show (ab)MHZ
-					{
-						lcd.print(frequency / 1000000);
-						lcd.print("MHz");
-					}
-					else if(frequency > 1e6) //show (b.c)MHz
-					{
-						lcd.print(frequency / 1000000);
-						lcd.print('.');
-						lcd.print((frequency / 100000) % 10);
-						lcd.print("MHz");
-					}
-					else //show (cde)kHz
-					{
-						lcd.print(frequency / 1000);
-						lcd.print("kHz");
-					}
+					if(frequency >= 10e6) freq_string = String(frequency / 1000000) + "MHz"; //frequency has 10s of MHz, show (ab)MHZ
+					else if(frequency > 1e6) freq_string = String(frequency / 1000000) + "." + String(frequency / 100000) + "MHz";//show (b.c)MHz
+					else freq_string = String(frequency / 1000) + "kHz";//show (cde)kHz
+					lcd.print(freq_string);
+					
 				}
 				
+				RPI.print("SRX - " + freq_string +";\n");
 				lcd_write(1,14, "RX");
 				lcd_write(1,7, watt_strings[power]);
 				
@@ -1014,6 +1020,7 @@ void loop()
 						if(extended_mode) send_extended ^=1; //if we're using two packet messages, send the other one next time
 						digitalWrite(LED,LOW);
 						lcd_write(1,14,"RX");
+						RPI.print("SRX - " + freq_string +";\n");
 						goto end;
 					}
 					else
@@ -1086,6 +1093,7 @@ void loop()
 						{
 							digitalWrite(LED, HIGH);
 							lcd_write(1,14, "TX");
+							RPI.print("STX - " + freq_string +";\n");
 							substate = 1;
 							attachCoreTimerService(tx); 
 							goto end;
@@ -1182,7 +1190,9 @@ end:
 			switch(rx_string[0])
 			{
 				case 'C': 	RPI.print("C"+callsign+";\n"); break;
-				case 'L': 	RPI.print("L"+locator+";\n"); break;
+				case 'L': 	if(gps_enabled) RPI.print("LGPS;\n"); 
+							else RPI.print("L"+locator+";\n"); 
+							break;
 				case 'P': 	RPI.print("P"+dbm_strings[power]+";\n"); break;
 				case 'B':	RPI.print('B');
 							for(int i =0; i<23; i++)
@@ -1219,7 +1229,7 @@ end:
 							RPI.print(gps.time.second());
 							RPI.print(";\n");
 							break;
-							
+				case 'S':	RPI.print("SHello world :);\n"); break;
 				default: panic("Received unknown character from Pi", 19);
 							
 
@@ -1233,7 +1243,13 @@ end:
 				case 'C': 	callsign = data; break;
 				case 'I': 	ip_address = data; break;
 				case 'H': 	hostname = data; break;
-				case 'L': 	locator = data; break;
+				case 'L': 	if(data == "GPS") gps_enabled = 1;
+							else
+							{
+								gps_enabled = 0;
+								locator = data; 
+							}
+							break;
 				case 'P': 	for (int i =0; i< 19; i++)
 							{
 								if(dbm_strings[i] == data)
