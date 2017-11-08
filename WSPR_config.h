@@ -17,7 +17,7 @@
 #define PC Serial
 #define RPI Serial0
 #define HOME_SECOND 1200
-#define SECOND 4e5
+#define SECOND 1e6
 #define LED 1
 #define TIMEOUT 5*SECOND
 #define TIMER_ENABLED 1<<15
@@ -28,7 +28,8 @@
 #define GPS_PPS_INTERRUPT 2
 #define PIN_A0 0
 #define MENU_BTN 16
-#define EDIT_BTN 13
+#define EDIT_BTN 19
+#define PI_WATCHDOG 3
 
 //////////////////////
 //Enabled debug mode//

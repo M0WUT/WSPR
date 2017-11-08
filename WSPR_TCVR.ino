@@ -1,5 +1,7 @@
 #include "WSPR_config.h"
 
+const String version = "0.1";
+
 String callsign="M0WUT";
 String locator="AA00aa";
 
@@ -14,6 +16,7 @@ DogLcd lcd(21, 20, 24, 22);
 bool calibration_flag, pi_rx_flag, state_initialised=0, editing_flag=0, warning = 0, gps_enabled=1, extended_mode = 0; //flags used to indicate to the main loop that an interrupt driven event has completed
 uint32_t calibration_value; //Contains the number of pulses from 2.5MHz ouput of Si5351 in 80 seconds (should be 200e6) 
 int substate=0;
+int watchdog_counter = 0;
 
 enum menu_state{START, UNCONFIGURED, UNLOCKED, HOME, PANIC, CALLSIGN, CALLSIGN_CHECK, EXTENDED_CHECK, LOCATOR, LOCATOR_CHECK, POWER, POWER_WARNING, POWER_QUESTION, TX_PERCENTAGE, IP, BAND, OTHER_BAND_WARNING, OTHER_BAND_QUESTION, ENCODING, DATE_FORMAT, CALIBRATING};
 enum power_t{dbm0, dbm3, dbm7, dbm10, dbm13, dbm17, dbm20, dbm23, dbm27, dbm30, dbm33, dbm37, dbm40, dbm43, dbm47, dbm50, dbm53, dbm57, dbm60};
@@ -58,6 +61,7 @@ void setup()
 	pinMode(MENU_BTN, INPUT);
 	pinMode(EDIT_BTN, INPUT);
 	pinMode(LED, OUTPUT);
+	pinMode(PI_WATCHDOG, INPUT);
 	digitalWrite(LED, LOW);
 
 	//osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
@@ -134,6 +138,11 @@ bool edit_pressed()
 	return !digitalRead(EDIT_BTN);
 }
 
+void clear_watchdog()
+{
+	watchdog_counter=0;
+}
+
 uint32_t tx (uint32_t currentTime)
 {
 	substate++;
@@ -161,17 +170,50 @@ void loop()
 		calibration_flag = 0;
 	}
 	
+	if (state != START)
+	{
+		if(++watchdog_counter > TIMEOUT) //Server has died
+		{
+			if(state ==HOME && substate > 0) //we are transmitting
+			{
+				detachCoreTimerService(tx); //stop it
+				osc.disable_clock(0);
+			}
+			state_clean();
+			state = START;
+			goto end;
+		}
+		
+	}
 	switch (state) //going to attempt to implement as a state machine, sure M0IKY will have some complaints to make 
 	{
 		case START:
 		{
-			if(0); //TODO add EEPROM read function to see if valid configuration data has been found	
-			else
+				
+			
+			lcd_write(0,2,"Waiting for");
+			lcd_write(1,0, "server to start");
+			while(digitalRead(PI_WATCHDOG)) //Wait until server starts
 			{
-				state_clean();
-				state = UNCONFIGURED;
-				goto end;
+				static int dot_num = 0;
+				lcd.setCursor(2,0);
+				for (int i =0; i< dot_num; i++)
+				{
+					lcd.print(".");
+				}
+				dot_num++;
+				dot_num %= 16;
+				PC.println(dot_num);
+				digitalWrite(1, dot_num%2); //Flash LED
+				delay(1000);
+				lcd_write(2,0,blank_line);
 			}
+			attachInterrupt(1, clear_watchdog, RISING); //INT1 is on RB14, will reset the watchdog timeout everytime the pin goes high.
+			state_clean();
+			while(RPI.available())RPI.read();
+			state = UNCONFIGURED;
+			goto end;
+			
 			
 			break;
 		} 
@@ -191,8 +233,6 @@ void loop()
 			if(menu_pressed())
 			{
 				state_clean();
-				RPI.print("I;\n");
-				RPI.print("H;\n");
 				state = IP;
 				goto end;
 			}
@@ -615,25 +655,29 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
-				
+				ip_address = "0.0.0.0";
+				hostname = "deadbeef";
+				RPI.print("I;\n");
+				RPI.print("H;\n");
 				//Ensure that this screen always shows live data by clearing IP and hostname and re-requesting them
 				lcd_write(0,0, "IP and Hostname");
-				static int counter = 0;
-				if(ip_address == "0.0.0.0" || hostname == "deadbeef") //Wait for defaults to be overwritten
-				{
-					//TODO find out what happens if not connected to network and implement error handling
-					if(++counter > TIMEOUT) panic("Pi not responding",19);
-					goto end;
-				}
-				
-				
-				lcd_write(1,0, ip_address);
-				lcd_write(2,0, hostname);
 				RPI.print("SDisplaying connection info;\n");
+				
 				while(menu_pressed()) delay(50);
 				while(edit_pressed())delay(50);
 				state_initialised=1;
 			}
+			
+			if(ip_address == "0.0.0.0" || hostname == "deadbeef") //Wait for defaults to be overwritten
+			{
+				for(int counter =0; !RPI.available(); counter++)
+				{
+					if(counter > TIMEOUT) panic("Pi not responding", 19);
+				}
+				goto end;
+			}
+			lcd_write(1,0, ip_address);
+			lcd_write(2,0, hostname);
 			
 			if(menu_pressed())
 			{
@@ -855,7 +899,7 @@ void loop()
 					state_clean();
 					goto end;
 				}
-				case 21: 	if(WSPR::encode(callsign, locator,power,symbols, WSPR_EXTENDED) == 21)
+				case 21: 	if(WSPR::encode(callsign, locator,power,symbols, WSPR_EXTENDED) == 0)
 							{
 								state = HOME;
 								state_clean();
@@ -1230,7 +1274,8 @@ end:
 							RPI.print(";\n");
 							break;
 				case 'S':	RPI.print("SHello world :);\n"); break;
-				default: panic("Received unknown character from Pi", 19);
+				case 'V': 	RPI.print("V"+version+";\n");
+				default: panic("Received unknown character from Pi" + rx_string, 19);
 							
 
 			};
@@ -1255,7 +1300,7 @@ end:
 								if(dbm_strings[i] == data)
 								{
 									power = (power_t)i;
-									break;
+									goto actual_end;
 								}
 							}
 							panic("Invalid power specified");
@@ -1270,13 +1315,8 @@ end:
 				case 'F': 	frequency = atoi(data.c_str()); break;
 				case 'X':	tx_percentage = atoi(data.c_str()); break;
 				default: 	panic("Unexpected char received from Pi", 19);
-							
-					
-				
-				
-				
 			};	
-			state_initialised = 0; //Re-initialise the state in case information has changed
+			if(state != IP) state_initialised = 0; //Re-initialise the state in case information has changed
 		}
 	}
 actual_end:;

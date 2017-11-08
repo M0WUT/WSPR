@@ -145,7 +145,7 @@ int WSPR::encode(String callsign, String locator, int power, char *wspr_symbols,
 		}
 		if(callsign[i]=='/') //Have to use extended protocol
 		{
-			if (slash_location > 0) return 3; 
+			if (slash_location > 0) return 3; //Have already found a / in the callsign
 			slash_location=i;
 		}
 		if((i==10) || (slash_location==0 && i==6)) return 4;
