@@ -13,10 +13,10 @@ char symbols2[162]; //Used to store more WSPR symbols in case of extended mode
 Si5351 osc;
 TinyGPSPlus gps;
 DogLcd lcd(21, 20, 24, 22);
-bool calibration_flag, pi_rx_flag, state_initialised=0, editing_flag=0, warning = 0, gps_enabled=1, extended_mode = 0; //flags used to indicate to the main loop that an interrupt driven event has completed
+bool calibration_flag, pi_rx_flag, state_initialised=0, editing_flag=0, warning = 0, gps_enabled=1, extended_mode = 0, valid_ip = 0; //flags used to indicate to the main loop that an interrupt driven event has completed
 uint32_t calibration_value; //Contains the number of pulses from 2.5MHz ouput of Si5351 in 80 seconds (should be 200e6) 
 int substate=0;
-int watchdog_counter = 0;
+uint32_t watchdog_counter = 0;
 
 enum menu_state{START, UNCONFIGURED, UNLOCKED, HOME, PANIC, CALLSIGN, CALLSIGN_CHECK, EXTENDED_CHECK, LOCATOR, LOCATOR_CHECK, POWER, POWER_WARNING, POWER_QUESTION, TX_PERCENTAGE, IP, BAND, OTHER_BAND_WARNING, OTHER_BAND_QUESTION, ENCODING, DATE_FORMAT, CALIBRATING};
 enum power_t{dbm0, dbm3, dbm7, dbm10, dbm13, dbm17, dbm20, dbm23, dbm27, dbm30, dbm33, dbm37, dbm40, dbm43, dbm47, dbm50, dbm53, dbm57, dbm60};
@@ -140,6 +140,7 @@ bool edit_pressed()
 
 void clear_watchdog()
 {
+	PC.println(watchdog_counter);
 	watchdog_counter=0;
 }
 
@@ -174,9 +175,10 @@ void loop()
 	{
 		if(++watchdog_counter > TIMEOUT) //Server has died
 		{
-			if(state ==HOME && substate > 0) //we are transmitting
+			PC.println("Server dead :(");
+			if(state == HOME && substate > 0) //we are transmitting
 			{
-				detachCoreTimerService(tx); //stop it
+				detachCoreTimerService(tx); //stop transmitting
 				osc.disable_clock(0);
 			}
 			state_clean();
@@ -189,12 +191,11 @@ void loop()
 	{
 		case START:
 		{
-				
-			
 			lcd_write(0,2,"Waiting for");
 			lcd_write(1,0, "server to start");
-			while(digitalRead(PI_WATCHDOG)) //Wait until server starts
-			{
+			bool old_watchdog = digitalRead(PI_WATCHDOG);
+			while(old_watchdog == digitalRead(PI_WATCHDOG)) //Wait until server starts i.e. watchdog pin changes
+			{ 
 				static int dot_num = 0;
 				lcd.setCursor(2,0);
 				for (int i =0; i< dot_num; i++)
@@ -210,6 +211,7 @@ void loop()
 			}
 			attachInterrupt(1, clear_watchdog, RISING); //INT1 is on RB14, will reset the watchdog timeout everytime the pin goes high.
 			state_clean();
+			digitalWrite(1,LOW);
 			while(RPI.available())RPI.read();
 			state = UNCONFIGURED;
 			goto end;
@@ -655,6 +657,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				valid_ip = 0;
 				ip_address = "0.0.0.0";
 				hostname = "deadbeef";
 				RPI.print("I;\n");
@@ -676,9 +679,12 @@ void loop()
 				}
 				goto end;
 			}
-			lcd_write(1,0, ip_address);
-			lcd_write(2,0, hostname);
-			
+			if(!valid_ip)
+			{
+				lcd_write(1,0, ip_address);
+				lcd_write(2,0, hostname);
+				valid_ip = 1;
+			}
 			if(menu_pressed())
 			{
 				state_clean();

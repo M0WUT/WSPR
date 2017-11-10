@@ -19,7 +19,7 @@
 #define HOME_SECOND 1200
 #define SECOND 1e6
 #define LED 1
-#define TIMEOUT 5*SECOND
+#define TIMEOUT 2*SECOND
 #define TIMER_ENABLED 1<<15
 #define NO_PRESCALER 0
 #define MODE_32_BIT_TIMER 1<<3
@@ -30,6 +30,7 @@
 #define MENU_BTN 16
 #define EDIT_BTN 19
 #define PI_WATCHDOG 3
+
 
 //////////////////////
 //Enabled debug mode//
