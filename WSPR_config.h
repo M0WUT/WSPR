@@ -16,8 +16,7 @@
 #define GPS Serial1
 #define PC Serial
 #define RPI Serial0
-#define HOME_SECOND 1200
-#define SECOND 1e6
+#define SECOND 6e6 //Rough number of loops per second, a counter up to this value will take (VERY) roughly 1 second
 #define LED 1
 #define TIMEOUT 2*SECOND
 #define TIMER_ENABLED 1<<15
@@ -39,10 +38,8 @@
 #define DEBUG 1 //set to 0 for normal mode
 #define SKIP_CALIBRATION 1
 
-/////////////////////////
-//User adjustable stuff//
-/////////////////////////
 
-#define LCD_CONTRAST 0x28
+
+
 
 

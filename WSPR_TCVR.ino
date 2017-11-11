@@ -1,6 +1,6 @@
 #include "WSPR_config.h"
 
-const String version = "0.1";
+const String VERSION = "0.1";
 
 String callsign="M0WUT";
 String locator="AA00aa";
@@ -68,6 +68,8 @@ void setup()
 	
 	callsign.reserve(10);
 	locator.reserve(6);
+	for(int i = 0; i<24; i++)
+		band_array[i] = i%10;
 }
 
 void lcd_write(int row, int col, String data)
@@ -140,7 +142,6 @@ bool edit_pressed()
 
 void clear_watchdog()
 {
-	PC.println(watchdog_counter);
 	watchdog_counter=0;
 }
 
@@ -203,7 +204,7 @@ void loop()
 					lcd.print(".");
 				}
 				dot_num++;
-				dot_num %= 16;
+				dot_num %= 17;
 				PC.println(dot_num);
 				digitalWrite(1, dot_num%2); //Flash LED
 				delay(1000);
@@ -212,7 +213,6 @@ void loop()
 			attachInterrupt(1, clear_watchdog, RISING); //INT1 is on RB14, will reset the watchdog timeout everytime the pin goes high.
 			state_clean();
 			digitalWrite(1,LOW);
-			while(RPI.available())RPI.read();
 			state = UNCONFIGURED;
 			goto end;
 			
@@ -238,7 +238,6 @@ void loop()
 				state = IP;
 				goto end;
 			}
-			
 			break;
 		}
 		
@@ -1235,6 +1234,7 @@ end:
 		int terminator_index = rx_string.indexOf(';');
 		if(rx_string_length != (terminator_index +1)) panic("Command not ; terminated"); //This also handles no ; present as indexOf returns -1 if not found and length != 0
 		
+		PC.print(rx_string);
 		if(rx_string_length == 2) //We are being requested data from
 		{
 			switch(rx_string[0])
@@ -1280,7 +1280,7 @@ end:
 							RPI.print(";\n");
 							break;
 				case 'S':	RPI.print("SHello world :);\n"); break;
-				case 'V': 	RPI.print("V"+version+";\n");
+				case 'V': 	RPI.print("V"+VERSION+";\n");
 				default: panic("Received unknown character from Pi" + rx_string, 19);
 							
 
