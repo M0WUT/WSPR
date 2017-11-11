@@ -1,6 +1,6 @@
 #include "WSPR_config.h"
 
-const String VERSION = "0.1";
+const String VERSION = "0.1"; //Please don't touch this, everything will be fine but you might make the auto-updater unhappy
 
 String callsign="M0WUT";
 String locator="AA00aa";
@@ -16,37 +16,43 @@ DogLcd lcd(21, 20, 24, 22);
 bool calibration_flag, pi_rx_flag, state_initialised=0, editing_flag=0, warning = 0, gps_enabled=1, extended_mode = 0, valid_ip = 0; //flags used to indicate to the main loop that an interrupt driven event has completed
 uint32_t calibration_value; //Contains the number of pulses from 2.5MHz ouput of Si5351 in 80 seconds (should be 200e6) 
 int substate=0;
-uint32_t watchdog_counter = 0;
+uint32_t watchdog_counter = 0; //Used to detect server timeout (i.e. server crash detection!)
+uint8_t gps_symbol[7] = {14,27,17,27,14,14,4}; //I would have made this const but threw type errors and had better things to do than edit someone else's library
 
-enum menu_state{START, UNCONFIGURED, UNLOCKED, HOME, PANIC, CALLSIGN, CALLSIGN_CHECK, EXTENDED_CHECK, LOCATOR, LOCATOR_CHECK, POWER, POWER_WARNING, POWER_QUESTION, TX_PERCENTAGE, IP, BAND, OTHER_BAND_WARNING, OTHER_BAND_QUESTION, ENCODING, DATE_FORMAT, CALIBRATING};
+//State variable
+enum menu_state{START, UNCONFIGURED, UNLOCKED, HOME, PANIC, CALLSIGN, CALLSIGN_CHECK, EXTENDED_CHECK, LOCATOR, LOCATOR_CHECK, POWER, POWER_WARNING, POWER_QUESTION, TX_PERCENTAGE, IP, BAND, OTHER_BAND_WARNING, ENCODING, DATE_FORMAT, CALIBRATING};
+
+//Power related stuff
 enum power_t{dbm0, dbm3, dbm7, dbm10, dbm13, dbm17, dbm20, dbm23, dbm27, dbm30, dbm33, dbm37, dbm40, dbm43, dbm47, dbm50, dbm53, dbm57, dbm60};
-enum band_t{BAND_160, BAND_80, BAND_60, BAND_40, BAND_30, BAND_20, BAND_17, BAND_15, BAND_12, BAND_10, BAND_OTHER};
-const String band_strings[] = {"160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "Other"}; 
 const String dbm_strings[] = {"0", "3", "7", "10", "13", "17", "20", "23", "27", "30", "33", "37", "40", "43", "47", "50", "53", "57", "60"};
 const String watt_strings[] = {"1mW", "2mW", "5mW", "10mW", "20mW", "50mW", "100mW", "200mW", "500mW", "1W", "2W", "5W", "10W", "20W", "50W", "100W", "200W", "500W", "1kW"};
-const double band_freq[] = {1836600.0, 3592600.0, 5287200.0, 7038600.0, 10138700.0, 14095600.0, 18104600.0, 21094600.0, 24924600.0, 28124600.0};
-enum date_t {BRITISH, AMERICAN, GLOBAL};
-enum rx_state_t {RX_START, RX_CALLSIGN, RX_LOCATOR, RX_POWER, RX_BAND, RX_FREQUENCY, RX_TX_PERCENTAGE, RX_STATUS, RX_TIMESTAMP};
 
-									
+//Band related stuff
+enum band_t{BAND_2200, BAND_630, BAND_160, BAND_80, BAND_60, BAND_40, BAND_30, BAND_20, BAND_17, BAND_15, BAND_12, BAND_10, BAND_HOP};
+const String band_strings[] = {"2200m", "630m", "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"}; 
+const double band_freq[] = {136000.0, 474200.0, 1836600.0, 3592600.0, 5287200.0, 7038600.0, 10138700.0, 14095600.0, 18104600.0, 21094600.0, 24924600.0, 28124600.0};
+
+//Date related stuff
+enum date_t {BRITISH, AMERICAN, GLOBAL};								
 const String date_strings[] = {"DD/MM/YY", "MM/DD/YY", "YY/MM/DD"};
+
 const uint32_t wspr_tone_delay = (uint32_t)(256000.0 * (double)CORE_TICK_RATE/375.0);
 
-const char letters[] = {'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','0','1','2','3','4','5','6','7','8','9','/',' ','A'}; //the extra A means the index can be incremented from '/', next time it searches for 'A' it will returns 0 not 37 as it loops from the starts
-const String blank_line = "                ";
+const char letters[] = {'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
+						'0','1','2','3','4','5','6','7','8','9','/',' ','A'}; //the extra A means the index can be incremented from '/', next time it searches for 'A' it will returns 0 not 37 as it loops from the starts
+const String blank_line = "                "; //Very important to allow partial clearing of the LCD
+String old_callsign = "";
+String old_locator = "";
 menu_state state = START;
 String ip_address = "0.0.0.0";
 String hostname = "deadbeef";
 power_t power = dbm23;
-rx_state_t rx_state = RX_START;
+power_t old_power;
 band_t band_array[24];
+band_t old_band_array[24];
 band_t band = BAND_20;
 date_t date_format = BRITISH;
-uint32_t frequency = 136e3;
 double tx_frequency=0;
-int time_request = 0;
-
-
 
 void setup()
 {
@@ -66,10 +72,11 @@ void setup()
 
 	//osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
 	
-	callsign.reserve(10);
-	locator.reserve(6);
-	for(int i = 0; i<24; i++)
-		band_array[i] = i%10;
+	callsign.reserve(11);
+	old_callsign.reserve(11);
+	locator.reserve(7);
+	old_locator.reserve(7);
+
 }
 
 void lcd_write(int row, int col, String data)
@@ -78,12 +85,38 @@ void lcd_write(int row, int col, String data)
 	lcd.print(data);
 }
 
+bool constant_band_check()
+{
+	//Checks if all elements in band array are the same (i.e. single band operation)
+	for(int i=0; i<23; i++)
+		if(band_array [i] != band_array[i+1])
+			return 0;
+	return 1;
+}
+
+bool band_array_changed()
+{
+	//Checks if any elements in band_array have been changed
+	for(int i=0; i<24; i++)
+		if(band_array [i] != old_band_array[i])
+			return 1;
+	return 0;
+}
+
+bool unfiltered_band()
+{
+	//Checks if any elements in band_array do not have a BPF
+	for(int i=0; i<24; i++)
+		if(band_array [i]  == BAND_2200 || band_array[i] == BAND_630)
+			return 1;
+	return 0;
+}
+
+
 int letters_find(char x) //returns the index of char x in the array "letters"
 {
 	for (int i=0; i<39; i++)
-	{
 		if(letters[i]==x) return i;
-	}
 	return -1;
 }
 
@@ -132,7 +165,7 @@ void check_frequency()
 
 bool menu_pressed()
 {
-	return !digitalRead(MENU_BTN);
+	return !digitalRead(MENU_BTN); //done in function to save me remembering active high / low
 }
 
 bool edit_pressed()
@@ -142,7 +175,7 @@ bool edit_pressed()
 
 void clear_watchdog()
 {
-	watchdog_counter=0;
+	watchdog_counter = 0;
 }
 
 uint32_t tx (uint32_t currentTime)
@@ -206,13 +239,13 @@ void loop()
 				dot_num++;
 				dot_num %= 17;
 				PC.println(dot_num);
-				digitalWrite(1, dot_num%2); //Flash LED
+				digitalWrite(LED, dot_num%2); //Flash LED
 				delay(1000);
 				lcd_write(2,0,blank_line);
 			}
 			attachInterrupt(1, clear_watchdog, RISING); //INT1 is on RB14, will reset the watchdog timeout everytime the pin goes high.
 			state_clean();
-			digitalWrite(1,LOW);
+			digitalWrite(LED,LOW);
 			state = UNCONFIGURED;
 			goto end;
 			
@@ -245,6 +278,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				old_callsign = callsign; //Used to only send update to Pi if callsign is changed
 				RPI.print("SInputting Callsign;\n");
 				lcd_write(0,4, "Callsign");
 				lcd_write(1,0, callsign);
@@ -367,6 +401,8 @@ void loop()
 				case 18: extended_mode = 1; //Deliberate fallthrough as that is a success (same as default case)
 				default: 
 					state_clean();
+					if(old_callsign != callsign)
+						RPI.print("C"+callsign+";\n");
 					state=LOCATOR;
 					goto end;
 			};
@@ -382,6 +418,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				old_locator = gps_enabled ? "GPS" : locator;
 				RPI.print("SInputting Locator;\n");
 				lcd_write(0,4, "Locator");
 				if(!gps_enabled)
@@ -434,7 +471,7 @@ void loop()
 				int counter =0;
 				while(edit_pressed())
 				{	
-					if(++counter>(3*SECOND))
+					if(++counter>(2*SECOND))
 					{
 						gps_enabled = !gps_enabled;
 						counter=0;
@@ -501,6 +538,8 @@ void loop()
 			if(gps_enabled) 
 			{
 				state_clean();
+				if(old_locator != "GPS")
+					RPI.print("LGPS;\n");
 				state=POWER;
 				goto end;
 			}
@@ -535,6 +574,8 @@ void loop()
 			lcd_write(0,0, lcd_message);
 			delay(2000);
 			state_clean();
+			if(old_locator != locator)
+				RPI.print("L"+locator+";\n");
 			state = LOCATOR;
 			goto end;
 		}//end of LOCATOR_CHECK
@@ -543,6 +584,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				old_power = power;
 				RPI.print("SInputting Power;\n");
 				lcd_write(0,5, "Power");
 				lcd_write(1,0, watt_strings[power]);
@@ -554,6 +596,8 @@ void loop()
 			if(menu_pressed())
 			{
 				state_clean();
+				if(old_power != power)
+					RPI.print("P"+dbm_strings[power]+";\n");
 				state = TX_PERCENTAGE;
 				goto end;	
 			}
@@ -604,6 +648,8 @@ void loop()
 			if (menu_pressed())
 			{
 				state_clean();
+				if(old_power != power)
+					RPI.print("P"+dbm_strings[power]+";\n");
 				state= TX_PERCENTAGE;
 				goto end;
 			}
@@ -623,8 +669,10 @@ void loop()
 		
 		case TX_PERCENTAGE:
 		{
+			static int old_tx_percentage;
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				old_tx_percentage = tx_percentage;
 				RPI.print("SSetting TX Percentage;\n");
 				lcd_write(0,1, "TX Percentage");
 				lcd_write(1,0, ((String)tx_percentage+"%"));
@@ -636,6 +684,12 @@ void loop()
 			if(menu_pressed())
 			{
 				state_clean();
+				if(old_tx_percentage != tx_percentage)
+				{
+					RPI.print("X");
+					RPI.print(tx_percentage);
+					RPI.print(";\n");
+				}
 				state = BAND;	
 				goto end;	
 			}
@@ -696,11 +750,24 @@ void loop()
 		
 		case BAND:
 		{
+			static band_t temp_band = BAND_2200;
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				for(int i = 0; i<24; i++) //Copy band array to old band array
+					old_band_array[i] = band_array[i];
+				
 				RPI.print("SSetting band;\n");
 				lcd_write(0,6, "Band");
-				lcd_write(1,0, band_strings[band]);
+				if(constant_band_check())
+				{
+					lcd_write(1,0, band_strings[band_array[0]]);
+					temp_band = band_array[0];
+				}
+				else
+				{
+					lcd_write(1,0,"Bandhop");
+					temp_band = BAND_HOP;
+				}
 				while(menu_pressed()) delay(50);
 				state_initialised=1;
 			}
@@ -708,128 +775,65 @@ void loop()
 			if(menu_pressed())
 			{
 				state_clean();
-				if(band == BAND_OTHER) state = OTHER_BAND_WARNING;
-				else state = DATE_FORMAT;
-				for (int i =0; i<24; i++) band_array[i] = band;
+				state = OTHER_BAND_WARNING;
+				if(temp_band != BAND_HOP)
+					for (int i =0; i<24; i++) band_array[i] = temp_band;
+				if(band_array_changed())
+				{	//update server
+					RPI.print('B');
+					for(int i =0; i<23; i++)
+					{
+						RPI.print(band_array[i]);
+						RPI.print(',');
+					}
+					RPI.print(band_array[23]);
+					RPI.print(";\n");
+				}
 				goto end;	
 			}
 			
 			if(edit_pressed())
 			{
-				if(band != BAND_OTHER) band = (band_t)((int)band+1);
-				else band=BAND_160;
+				switch (temp_band)
+				{
+					BAND_HOP: 	//deliberate fallthrough
+					BAND_10:	temp_band = BAND_2200; break;
+					default:	temp_band = (band_t)((int)temp_band+1);
+				};
+				
 				lcd_write(1,0,blank_line);
-				lcd_write(1,0, band_strings[band]);
+				lcd_write(1,0, band_strings[temp_band]);
 				while(edit_pressed())delay(50);
 			}
 			
 			break;
-		}//end of POWER	
+		}//end of BAND
 		
 		case OTHER_BAND_WARNING:
 		{
+			if(!unfiltered_band())
+			{
+				state_clean();
+				state = DATE_FORMAT;
+				goto end;
+			}
+
 			if(!state_initialised)
 			{
-				lcd_write(0,4, "WARNING!");
-				lcd_write(1,0, "NO OUTPUT FILTER");
-				lcd_write(2,2, "Press \"Menu\"");
-				while(menu_pressed()) delay(50); //Wait for any previous button press to clear (written here so the display updates before debouncing)
-				state_initialised=1;
+				lcd_write(0,1, "No filters for");
+				lcd_write(1,1, "a chosen band!");	
+				lcd_write(2,2, "Press \"Menu\"");	
+				state_initialised = 1;
 			}
-		
+			
 			if(menu_pressed())
 			{
 				state_clean();
-				state = OTHER_BAND_QUESTION;
+				state = DATE_FORMAT;
 				goto end;
 			}
 			
-			break;
-		}//end of OTHER_BAND_WARNING	
-		
-		case OTHER_BAND_QUESTION:
-		{
-			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
-			{
-				lcd_write(0,1, "Enter VFO Freq");
-				lcd.setCursor(1,0);
-				lcd.print(frequency);
-				while(menu_pressed()) delay(50);
-				state_initialised=1;
-			}
-
-			if(menu_pressed())
-			{
-				switch(editing_flag)
-				{
-					case 0: //Not editing frequency so move to next menu screen
-					{
-						if(frequency < 500e3)
-						{
-							for (int i =0; i<3; i++)
-							{
-								lcd_write(2,0,blank_line);
-								delay(400);
-								lcd_write(2,0,"Must be >500kHz");
-								delay(400);
-							}
-							lcd_write(2,0,blank_line);
-						}
-						else
-						{
-							state_clean();
-							state = DATE_FORMAT;
-							goto end;
-						}
-						
-						break;
-					}
-					
-					case 1: //Editing frequency so move cursor to next character
-					{ 
-						if(++substate == 8)
-						{
-							substate = 0;
-							editing_flag = 0; // Have swept over whole callsign so assume editing is done
-							lcd.noCursor();
-							lcd.noBlink();
-							break;
-						}
-						lcd.setCursor(1,substate); //Callsign starts at column 3
-						break;
-					}
-				}; 
-				while(menu_pressed()) delay(50);	
-			}
-
-			if(edit_pressed())
-			{
-				switch(editing_flag)
-				{
-					case 0: //Start editing
-					{
-						lcd.setCursor(1,0);
-						lcd.cursor();
-						lcd.blink();
-						editing_flag=1;
-						break;
-					}
-					
-					case 1: //Change current character (indexed by substate)
-					{
-						frequency += pow(10,substate);
-						frequency = frequency%30000000;
-						lcd.setCursor(1,0);
-						lcd.print(frequency);
-						lcd.setCursor(1,substate);
-						break;
-					} 
-				};
-				while(edit_pressed())delay(50);
-			}
-			
-			break; 
-		}//end of OTHER_BAND_QUESTION
+		}//end of OTHER_BAND_WARNING
 		
 		case DATE_FORMAT:
 		{
@@ -1012,36 +1016,17 @@ void loop()
 					seed += callsign[i];
 				}
 				randomSeed(seed);	
+				lcd_write(1,0, band_strings[band]);
+				tx_frequency = band_freq[band] + 1400 + random(20,180);
 				
-				if(band != BAND_OTHER)
-				{
-					freq_string = band_strings[band];
-					lcd_write(1,0, band_strings[band]);
-					tx_frequency = band_freq[band] + 1400 + random(20,180);
-				}
-				else
-				{
-					lcd_write(1,13, "!");
-					lcd.setCursor(1,0);
-					tx_frequency = frequency + 1400 + random(20,180);
-					
-					
-					//frequency is abcdefgh Hz
-					if(frequency >= 10e6) freq_string = String(frequency / 1000000) + "MHz"; //frequency has 10s of MHz, show (ab)MHZ
-					else if(frequency > 1e6) freq_string = String(frequency / 1000000) + "." + String(frequency / 100000) + "MHz";//show (b.c)MHz
-					else freq_string = String(frequency / 1000) + "kHz";//show (cde)kHz
-					lcd.print(freq_string);
-					
-				}
-				
-				RPI.print("SRX - " + freq_string +";\n");
+				RPI.print("SRX - " + band_strings[band] +";\n");
 				lcd_write(1,14, "RX");
 				lcd_write(1,7, watt_strings[power]);
 				
 				while(menu_pressed()) delay(50);
 				while(edit_pressed()) delay(50);
 				new_locator.reserve(6);
-				uint8_t gps_symbol[7] = {14,27,17,27,14,14,4};
+				
 				lcd.createChar(0, gps_symbol);
 				gps_watchdog = 0;
 				state_initialised=1;
@@ -1239,7 +1224,7 @@ end:
 		{
 			switch(rx_string[0])
 			{
-				case 'C': 	RPI.print("C"+callsign+";\n"); break;
+				case 'C': 	RPI.print("C"+callsign+";\n"); break; 
 				case 'L': 	if(gps_enabled) RPI.print("LGPS;\n"); 
 							else RPI.print("L"+locator+";\n"); 
 							break;
@@ -1252,13 +1237,7 @@ end:
 							}
 							RPI.print(band_array[23]);
 							RPI.print(";\n");
-							break;
-							
-				case 'F': 	RPI.print("F");
-							RPI.print(frequency);
-							RPI.print(";\n");
-							break;
-							
+							break;	
 							
 				case 'X':  	RPI.print("X");
 							RPI.print(tx_percentage);
@@ -1282,8 +1261,6 @@ end:
 				case 'S':	RPI.print("SHello world :);\n"); break;
 				case 'V': 	RPI.print("V"+VERSION+";\n");
 				default: panic("Received unknown character from Pi" + rx_string, 19);
-							
-
 			};
 		}
 		else //We are setting data
@@ -1318,7 +1295,6 @@ end:
 								else panic("Invalid band supplied");
 							}
 							break;
-				case 'F': 	frequency = atoi(data.c_str()); break;
 				case 'X':	tx_percentage = atoi(data.c_str()); break;
 				default: 	panic("Unexpected char received from Pi", 19);
 			};	
