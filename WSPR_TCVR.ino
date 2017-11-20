@@ -12,7 +12,8 @@ char symbols2[162]; //Used to store more WSPR symbols in case of extended mode
 
 Si5351 osc;
 TinyGPSPlus gps;
-DogLcd lcd(21, 20, 24, 22);
+DogLcd lcd(21, 20, 24, 22); //I don't know why it's called that, not my library!
+LC640 eeprom(EEPROM_CS);
 bool calibration_flag, pi_rx_flag, state_initialised=0, editing_flag=0, warning = 0, gps_enabled=1, extended_mode = 0, valid_ip = 0; //flags used to indicate to the main loop that an interrupt driven event has completed
 uint32_t calibration_value; //Contains the number of pulses from 2.5MHz ouput of Si5351 in 80 seconds (should be 200e6) 
 int substate=0;
@@ -52,6 +53,7 @@ band_t band_array[24];
 band_t old_band_array[24];
 band_t band = BAND_20;
 date_t date_format = BRITISH;
+date_t old_date_format;
 double tx_frequency=0;
 
 void setup()
@@ -223,11 +225,12 @@ void loop()
 	}
 	switch (state) //going to attempt to implement as a state machine, sure M0IKY will have some complaints to make 
 	{
-		case START:
+		case START: //Note this first state isn't quite the same as the others as it is blocking. This is becuase the UART doesn't need checking if the server is not running
 		{
 			lcd_write(0,2,"Waiting for");
 			lcd_write(1,0, "server to start");
 			bool old_watchdog = digitalRead(PI_WATCHDOG);
+			//TODO: load everything from EEPROM
 			while(old_watchdog == digitalRead(PI_WATCHDOG)) //Wait until server starts i.e. watchdog pin changes
 			{ 
 				static int dot_num = 0;
@@ -402,7 +405,15 @@ void loop()
 				default: 
 					state_clean();
 					if(old_callsign != callsign)
+					{
+						//Update server
 						RPI.print("C"+callsign+";\n");
+						//and save to EEPROM
+						for (int i = 0; i< 10; i++)
+						{
+							eeprom.write(EEPROM_CALLSIGN_BASE_ADDRESS + i, (i<callsign.length() ? callsign[i] : 0));
+						}
+					}
 					state=LOCATOR;
 					goto end;
 			};
@@ -539,7 +550,15 @@ void loop()
 			{
 				state_clean();
 				if(old_locator != "GPS")
+				{
+					//Update server
 					RPI.print("LGPS;\n");
+					//and save to EEPROM
+					for (int i = 0; i< 6; i++)
+					{
+						eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<locator.length() ? locator[i] : 0));
+					}
+				}
 				state=POWER;
 				goto end;
 			}
@@ -575,7 +594,13 @@ void loop()
 			delay(2000);
 			state_clean();
 			if(old_locator != locator)
+			{
 				RPI.print("L"+locator+";\n");
+				for (int i = 0; i< 6; i++)
+				{
+					eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<locator.length() ? locator[i] : 0));
+				}
+			}
 			state = LOCATOR;
 			goto end;
 		}//end of LOCATOR_CHECK
@@ -596,8 +621,6 @@ void loop()
 			if(menu_pressed())
 			{
 				state_clean();
-				if(old_power != power)
-					RPI.print("P"+dbm_strings[power]+";\n");
 				state = TX_PERCENTAGE;
 				goto end;	
 			}
@@ -649,7 +672,11 @@ void loop()
 			{
 				state_clean();
 				if(old_power != power)
+				{
 					RPI.print("P"+dbm_strings[power]+";\n");
+					eeprom.write(EEPROM_POWER_BASE_ADDRESS, power / 10);
+					eeprom.write(EEPROM_POWER_BASE_ADDRESS + 1, power % 10);
+				}
 				state= TX_PERCENTAGE;
 				goto end;
 			}
@@ -689,6 +716,7 @@ void loop()
 					RPI.print("X");
 					RPI.print(tx_percentage);
 					RPI.print(";\n");
+					eeprom.write(EEPROM_TX_PERCENTAGE_ADDRESS, tx_percentage / 10); //Can only be multiple of 10
 				}
 				state = BAND;	
 				goto end;	
@@ -785,6 +813,7 @@ void loop()
 					{
 						RPI.print(band_array[i]);
 						RPI.print(',');
+						eeprom.write(EEPROM_BAND_BASE_ADDRESS + i, band_array[i]);
 					}
 					RPI.print(band_array[23]);
 					RPI.print(";\n");
@@ -839,6 +868,7 @@ void loop()
 		{
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				old_date_format = date_format;
 				RPI.print("SSetting date format;\n");
 				lcd_write(0,2, "Date Format");
 				lcd_write(1,0, date_strings[date_format]);
@@ -849,6 +879,8 @@ void loop()
 			if(menu_pressed())
 			{
 				state_clean();
+				if(old_date_format != date_format)
+					eeprom.write(EEPROM_DATE_FORMAT_ADDRESS, date_format);
 				if(gps_enabled) state = UNLOCKED;
 				else state = ENCODING;
 				goto end;	
@@ -1258,7 +1290,7 @@ end:
 							RPI.print(gps.time.second());
 							RPI.print(";\n");
 							break;
-				case 'S':	RPI.print("SHello world :);\n"); break;
+				case 'S':	RPI.print("SHello world :);\n"); break; //TODO, this needs to be handled better
 				case 'V': 	RPI.print("V"+VERSION+";\n");
 				default: panic("Received unknown character from Pi" + rx_string, 19);
 			};
@@ -1268,7 +1300,10 @@ end:
 			String data = rx_string.substring(1, terminator_index); //strip off command stuff
 			switch (rx_string[0])
 			{
-				case 'C': 	callsign = data; break;
+				case 'C': 	callsign = data;
+							for(int i = 0; i < 10; i++)
+								eeprom.write(EEPROM_CALLSIGN_BASE_ADDRESS + i, (i<data.length() ? data[i] : 0));
+							break;
 				case 'I': 	ip_address = data; break;
 				case 'H': 	hostname = data; break;
 				case 'L': 	if(data == "GPS") gps_enabled = 1;
@@ -1277,12 +1312,18 @@ end:
 								gps_enabled = 0;
 								locator = data; 
 							}
+							for(int i = 0; i < 6; i++)
+							{
+								eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<data.length() ? data[i] : 0));
+							}
 							break;
 				case 'P': 	for (int i =0; i< 19; i++)
 							{
 								if(dbm_strings[i] == data)
 								{
 									power = (power_t)i;
+									eeprom.write(EEPROM_POWER_BASE_ADDRESS, i/10);
+									eeprom.write(EEPROM_POWER_BASE_ADDRESS + 1, i%10);
 									goto actual_end;
 								}
 							}
@@ -1291,11 +1332,17 @@ end:
 				case 'B': 	for (int i = 0; i<24; i++)
 							{
 								int x = data[2*i] - '0'; //2*i as comma seperated, then converted to int
-								if (x>=0 and x <12) band_array[i] = (band_t)x;
+								if (x>=0 and x <12)
+								{
+									band_array[i] = (band_t)x;
+									eeprom.write(EEPROM_BAND_BASE_ADDRESS + i, x);
+								}
 								else panic("Invalid band supplied");
 							}
 							break;
-				case 'X':	tx_percentage = atoi(data.c_str()); break;
+				case 'X':	tx_percentage = atoi(data.c_str());
+							eeprom.write(EEPROM_TX_PERCENTAGE_ADDRESS, tx_percentage / 10);
+							break;
 				default: 	panic("Unexpected char received from Pi", 19);
 			};	
 			if(state != IP) state_initialised = 0; //Re-initialise the state in case information has changed

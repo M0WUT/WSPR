@@ -7,6 +7,7 @@
 #include "src/TinyGPS/TinyGPS.h"
 #include "src/panic/panic.h"
 #include "src/DogLcd/DogLcd.h"
+#include "src/LC640/LC640.h"
 #include "src/maidenhead/maidenhead.h"
 
 //////////////////////////////
@@ -28,6 +29,7 @@
 #define PIN_A0 0
 #define MENU_BTN 16
 #define EDIT_BTN 19
+#define EEPROM_CS 28
 #define PI_WATCHDOG 3
 
 
@@ -38,6 +40,15 @@
 #define DEBUG 1 //set to 0 for normal mode
 #define SKIP_CALIBRATION 1
 
+//////////////////////////////
+//Memory Addresses in EEPROM//
+//////////////////////////////
+#define EEPROM_CALLSIGN_BASE_ADDRESS 0
+#define EEPROM_LOCATOR_BASE_ADDRESS 10
+#define EEPROM_POWER_BASE_ADDRESS 16
+#define EEPROM_TX_PERCENTAGE_ADDRESS 18
+#define EEPROM_DATE_FORMAT_ADDRESS 19
+#define EEPROM_BAND_BASE_ADDRESS 20
 
 
 
