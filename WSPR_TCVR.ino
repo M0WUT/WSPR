@@ -230,7 +230,48 @@ void loop()
 			lcd_write(0,2,"Waiting for");
 			lcd_write(1,0, "server to start");
 			bool old_watchdog = digitalRead(PI_WATCHDOG);
-			//TODO: load everything from EEPROM
+			eeprom.read(EEPROM_CALLSIGN_BASE_ADDRESS);
+			if(eeprom.read(EEPROM_CALLSIGN_BASE_ADDRESS) == 0) state = UNCONFIGURED; //No valid data in EEPROM
+			else
+			{	
+				//Load everything from EEPROM
+				
+				//Load callsign
+				callsign = "";
+				for(int i = 0; i < 10; i++)
+				{
+					char x = eeprom.read(EEPROM_CALLSIGN_BASE_ADDRESS + i);
+					if(x == 0) break;
+					else callsign += x;
+				}
+				
+				//Load locator
+				locator = "";
+				for(int i = 0; i < 6; i++)
+				{
+					char x = eeprom.read(EEPROM_LOCATOR_BASE_ADDRESS + i);
+					if(x == 0) break;
+					else locator += x;
+				}
+				if(locator == "GPS")
+				{
+					gps_enabled = 1;
+					locator = "AA00aa";
+				}
+				else gps_enabled = 0;
+				
+				power = (power_t)eeprom.read(EEPROM_POWER_ADDRESS);
+				
+				tx_percentage = 10 * eeprom.read(EEPROM_TX_PERCENTAGE_ADDRESS);
+				
+				date_format = (date_t) eeprom.read(EEPROM_DATE_FORMAT_ADDRESS);
+				
+				for(int i = 0; i<24; i++)
+					band_array[i] = (band_t) eeprom.read(EEPROM_BAND_BASE_ADDRESS + i);
+				
+				state = CALLSIGN;
+			}
+			
 			while(old_watchdog == digitalRead(PI_WATCHDOG)) //Wait until server starts i.e. watchdog pin changes
 			{ 
 				static int dot_num = 0;
@@ -249,7 +290,6 @@ void loop()
 			attachInterrupt(1, clear_watchdog, RISING); //INT1 is on RB14, will reset the watchdog timeout everytime the pin goes high.
 			state_clean();
 			digitalWrite(LED,LOW);
-			state = UNCONFIGURED;
 			goto end;
 			
 			
@@ -674,8 +714,7 @@ void loop()
 				if(old_power != power)
 				{
 					RPI.print("P"+dbm_strings[power]+";\n");
-					eeprom.write(EEPROM_POWER_BASE_ADDRESS, power / 10);
-					eeprom.write(EEPROM_POWER_BASE_ADDRESS + 1, power % 10);
+					eeprom.write(EEPROM_POWER_ADDRESS, power);	
 				}
 				state= TX_PERCENTAGE;
 				goto end;
@@ -1322,8 +1361,7 @@ end:
 								if(dbm_strings[i] == data)
 								{
 									power = (power_t)i;
-									eeprom.write(EEPROM_POWER_BASE_ADDRESS, i/10);
-									eeprom.write(EEPROM_POWER_BASE_ADDRESS + 1, i%10);
+									eeprom.write(EEPROM_POWER_ADDRESS, i);
 									goto actual_end;
 								}
 							}
