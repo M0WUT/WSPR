@@ -17,7 +17,7 @@
 #define GPS Serial1
 #define PC Serial
 #define RPI Serial0
-#define SECOND 6e6 //Rough number of loops per second, a counter up to this value will take (VERY) roughly 1 second
+#define SECOND 6e5 //Rough number of loops per second, a counter up to this value will take (VERY) roughly 1 second
 #define LED 1
 #define TIMEOUT 2*SECOND
 #define TIMER_ENABLED 1<<15
@@ -49,7 +49,12 @@
 #define EEPROM_TX_PERCENTAGE_ADDRESS 17
 #define EEPROM_DATE_FORMAT_ADDRESS 18
 #define EEPROM_BAND_BASE_ADDRESS 19
+#define EEPROM_TX_DISABLE_BASE_ADDRESS 44
 
+///////////////////////
+//Configuration stuff//
+///////////////////////
+#define LCD_CONTRAST 35 //0-63
 
 
 

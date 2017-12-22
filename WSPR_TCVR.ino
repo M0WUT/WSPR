@@ -19,23 +19,45 @@ uint32_t calibration_value; //Contains the number of pulses from 2.5MHz ouput of
 int substate=0;
 uint32_t watchdog_counter = 0; //Used to detect server timeout (i.e. server crash detection!)
 uint8_t gps_symbol[7] = {14,27,17,27,14,14,4}; //I would have made this const but threw type errors and had better things to do than edit someone else's library
+uint8_t crossed_t[7] = {
+	0b11111,
+	0b00100,
+	0b00100,
+	0b11111,
+	0b00100,
+	0b00100,
+	0b00100
+};
+uint8_t crossed_x[7] = {
+	0b10001,
+	0b10001,
+	0b01010,
+	0b11111,
+	0b01010,
+	0b10001,
+	0b10001
+};
+
+
 
 //State variable
-enum menu_state{START, UNCONFIGURED, UNLOCKED, HOME, PANIC, CALLSIGN, CALLSIGN_CHECK, EXTENDED_CHECK, LOCATOR, LOCATOR_CHECK, POWER, POWER_WARNING, POWER_QUESTION, TX_PERCENTAGE, IP, BAND, OTHER_BAND_WARNING, ENCODING, DATE_FORMAT, CALIBRATING};
+enum menu_state{START, UNCONFIGURED, UNLOCKED, HOME, PANIC, CALLSIGN, CALLSIGN_CHECK, EXTENDED_CHECK, LOCATOR, LOCATOR_CHECK, POWER, POWER_WARNING, POWER_QUESTION, TX_PERCENTAGE, IP, BAND, OTHER_BAND_WARNING, ENCODING, DATE_FORMAT, CALIBRATING, TX_DISABLED_QUESTION};
 
 //Power related stuff
 enum power_t{dbm0, dbm3, dbm7, dbm10, dbm13, dbm17, dbm20, dbm23, dbm27, dbm30, dbm33, dbm37, dbm40, dbm43, dbm47, dbm50, dbm53, dbm57, dbm60};
-const String dbm_strings[] = {"0", "3", "7", "10", "13", "17", "20", "23", "27", "30", "33", "37", "40", "43", "47", "50", "53", "57", "60"};
-const String watt_strings[] = {"1mW", "2mW", "5mW", "10mW", "20mW", "50mW", "100mW", "200mW", "500mW", "1W", "2W", "5W", "10W", "20W", "50W", "100W", "200W", "500W", "1kW"};
+int power_dbm[] = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30, 33, 37, 40, 43, 47, 50, 53, 57, 60};
+String dbm_strings[] = {"0", "3", "7", "10", "13", "17", "20", "23", "27", "30", "33", "37", "40", "43", "47", "50", "53", "57", "60"};
+String watt_strings[] = {"1mW", "2mW", "5mW", "10mW", "20mW", "50mW", "100mW", "200mW", "500mW", "1W", "2W", "5W", "10W", "20W", "50W", "100W", "200W", "500W", "1kW"};
 
 //Band related stuff
 enum band_t{BAND_2200, BAND_630, BAND_160, BAND_80, BAND_60, BAND_40, BAND_30, BAND_20, BAND_17, BAND_15, BAND_12, BAND_10, BAND_HOP};
-const String band_strings[] = {"2200m", "630m", "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"}; 
-const double band_freq[] = {136000.0, 474200.0, 1836600.0, 3592600.0, 5287200.0, 7038600.0, 10138700.0, 14095600.0, 18104600.0, 21094600.0, 24924600.0, 28124600.0};
+String band_strings[] = {"2200m", "630m", "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"}; 
+double band_freq[] = {136000.0, 474200.0, 1836600.0, 3592600.0, 5287200.0, 7038600.0, 10138700.0, 14095600.0, 18104600.0, 21094600.0, 24924600.0, 28124600.0};
 
 //Date related stuff
 enum date_t {BRITISH, AMERICAN, GLOBAL};								
-const String date_strings[] = {"DD/MM/YY", "MM/DD/YY", "YY/MM/DD"};
+String date_strings[] = {"DD/MM/YY", "MM/DD/YY", "YY/MM/DD"};
+bool time_requested = 0;
 
 const uint32_t wspr_tone_delay = (uint32_t)(256000.0 * (double)CORE_TICK_RATE/375.0);
 
@@ -47,18 +69,16 @@ String old_locator = "";
 menu_state state = START;
 String ip_address = "0.0.0.0";
 String hostname = "deadbeef";
-power_t power = dbm23;
-power_t old_power;
-band_t band_array[24];
-band_t old_band_array[24];
-band_t band = BAND_20;
-date_t date_format = BRITISH;
-date_t old_date_format;
+power_t power = dbm23, old_power;
+band_t band_array[24], old_band_array[24]; 
+bool tx_disable[12] = {1,1,1,1,1,1,1,1,1,1,1,1}; //Start with all bands Disabled
+band_t band = BAND_20, old_band;
+date_t date_format = BRITISH, old_date_format;
 double tx_frequency=0;
 
 void setup()
 {
-	lcd.begin(DOG_LCD_M163);
+	lcd.begin(DOG_LCD_M163, LCD_CONTRAST, DOG_LCD_VCC_5V);
 	lcd.noCursor();
 	register_lcd_for_panic(&lcd);
 	GPS.begin(9600);
@@ -200,8 +220,8 @@ void loop()
 		}
 		else
 		{
-			osc.plla_frequency = calibration_value <<2;
-			osc.pllb_frequency = calibration_value <<2;
+			osc.plla_frequency = calibration_value << 2;
+			osc.pllb_frequency = calibration_value << 2;
 		}
 		calibration_value = 0;
 		calibration_flag = 0;
@@ -266,6 +286,10 @@ void loop()
 				
 				date_format = (date_t) eeprom.read(EEPROM_DATE_FORMAT_ADDRESS);
 				
+				for(int i = 0; i<12; i++)
+					tx_disable[i] = eeprom.read(EEPROM_TX_DISABLE_BASE_ADDRESS + i) & 0x01;
+					
+					
 				for(int i = 0; i<24; i++)
 					band_array[i] = (band_t) eeprom.read(EEPROM_BAND_BASE_ADDRESS + i);
 				
@@ -276,9 +300,9 @@ void loop()
 			{ 
 				static int dot_num = 0;
 				lcd.setCursor(2,0);
-				for (int i =0; i< dot_num; i++)
+				for (int i =0; i< 16; i++)
 				{
-					lcd.print(".");
+					lcd.print(i< dot_num ? "." : " ");
 				}
 				dot_num++;
 				dot_num %= 17;
@@ -326,6 +350,7 @@ void loop()
 				lcd_write(0,4, "Callsign");
 				lcd_write(1,0, callsign);
 				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50);
 				state_initialised=1;
 			}
 
@@ -397,7 +422,7 @@ void loop()
 							}
 						}
 						int x = letters_find(callsign[substate]); //x is the index of the current character in array "letters"
-						if(x!=-1) callsign[substate] = letters[x+1]; //Overflow has been dealt with by adding the first character in letters to the end, when searched for next time, it will return the first instance of it at index 0
+						if(x != -1) callsign[substate] = letters[x+1]; //Overflow has been dealt with by adding the first character in letters to the end, when searched for next time, it will return the first instance of it at index 0
 						else panic("Invalid character found in callsign", 9);
 						lcd_write(1, 0, callsign);
 						if(callsign_check())
@@ -425,7 +450,7 @@ void loop()
 		{
 			String lcd_message;
 			//Not actual encoding, just checks for callsign related errors
-			switch (WSPR::encode(callsign, locator, power, symbols, WSPR_NORMAL))
+			switch (WSPR::encode(callsign, locator, power_dbm[power], symbols, WSPR_NORMAL))
 			{
 				case 1:  lcd_message = 	"Need 6 char loc in extended WSPR    Error 01    "; break;
 				case 2:  lcd_message = 	"  Callsign not  null terminated.    Error 02    "; break;
@@ -578,11 +603,12 @@ void loop()
 						} 
 					};
 				}
-				while(edit_pressed())delay(50);
+				while(edit_pressed()) delay(50);
 			}
 			
 			break; 
 		}//end of LOCATOR
+		
 		
 		case LOCATOR_CHECK:
 		{
@@ -594,9 +620,10 @@ void loop()
 					//Update server
 					RPI.print("LGPS;\n");
 					//and save to EEPROM
+					String GPS_string = "GPS";
 					for (int i = 0; i< 6; i++)
 					{
-						eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<locator.length() ? locator[i] : 0));
+						eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<GPS_string.length() ? GPS_string[i] : 0));
 					}
 				}
 				state=POWER;
@@ -605,13 +632,21 @@ void loop()
 			
 			String lcd_message;
 			//Not actual encoding, just checks for locator related errors
-			switch (WSPR::encode(callsign, locator, power, symbols, WSPR_NORMAL))
+			switch (WSPR::encode(callsign, locator, power_dbm[power], symbols, WSPR_NORMAL))
 			{
 				case 1:  lcd_message = 	"Need 6 char loc in extended WSPR    Error 01    "; break;
 				case 13: lcd_message = 	"Invalid Locator      Format         Error 13    "; break;
 				default: 	if(!extended_mode)
 							{
 								state_clean();
+								if(old_locator != locator)
+								{
+									RPI.print("L"+locator+";\n");
+									for (int i = 0; i< 6; i++)
+									{
+										eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<locator.length() ? locator[i] : 0));
+									}
+								}
 								state=POWER;
 								goto end;
 							}
@@ -620,30 +655,32 @@ void loop()
 			
 			if(extended_mode)
 			{
-				switch (WSPR::encode(callsign, locator, power, symbols, WSPR_EXTENDED))
+				switch (WSPR::encode(callsign, locator, power_dbm[power], symbols, WSPR_EXTENDED))
 				{
 					case 1:  lcd_message = 	"Need 6 char loc in extended WSPR    Error 01    "; break;
 					case 13: lcd_message = 	"Invalid Locator      Format         Error 13    "; break;
 					default: 
 						state_clean();
+						if(old_locator != locator)
+						{
+							RPI.print("L"+locator+";\n");
+							for (int i = 0; i< 6; i++)
+							{
+								eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<locator.length() ? locator[i] : 0));
+							}
+						}
 						state=POWER;
 						goto end;
 				};
 			}
 			lcd_write(0,0, lcd_message);
 			delay(2000);
-			state_clean();
-			if(old_locator != locator)
-			{
-				RPI.print("L"+locator+";\n");
-				for (int i = 0; i< 6; i++)
-				{
-					eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<locator.length() ? locator[i] : 0));
-				}
-			}
+			state_clean();			
 			state = LOCATOR;
 			goto end;
 		}//end of LOCATOR_CHECK
+		
+		
 		
 		case POWER:
 		{
@@ -844,11 +881,18 @@ void loop()
 				state_clean();
 				state = OTHER_BAND_WARNING;
 				if(temp_band != BAND_HOP)
+				{
 					for (int i =0; i<24; i++) band_array[i] = temp_band;
-				if(band_array_changed())
+				}
+				if(band_array_changed()) // This is only possible if the buttons have been used so all bands SHOULD (TM) be the same
 				{	//update server
+					if(tx_disable[band_array[0]])
+					{
+						state = TX_DISABLED_QUESTION;
+						
+					}
 					RPI.print('B');
-					for(int i =0; i<23; i++)
+					for(int i =0; i<24; i++)
 					{
 						RPI.print(band_array[i]);
 						RPI.print(',');
@@ -864,8 +908,8 @@ void loop()
 			{
 				switch (temp_band)
 				{
-					BAND_HOP: 	//deliberate fallthrough
-					BAND_10:	temp_band = BAND_2200; break;
+					case BAND_HOP: 	//deliberate fallthrough
+					case BAND_10:	temp_band = BAND_2200; break;
 					default:	temp_band = (band_t)((int)temp_band+1);
 				};
 				
@@ -876,6 +920,33 @@ void loop()
 			
 			break;
 		}//end of BAND
+		
+		case TX_DISABLED_QUESTION:
+		{
+			if(!state_initialised)
+			{
+				lcd_write(0,0, "Band TX Disabled");
+				lcd_write(1,2, "Menu: Enable");
+				lcd_write(2,2, "Edit: Ignore");
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50);
+				state_initialised=1;
+			}
+			
+			if(menu_pressed())
+			{
+				state_clean();
+				tx_disable[band_array[0]] = 0;
+				state = OTHER_BAND_WARNING;
+			}
+			
+			if(edit_pressed())
+			{
+				state_clean();
+				state = OTHER_BAND_WARNING;
+			}
+			break;
+		} //case TX_DISABLED_QUESTION
 		
 		case OTHER_BAND_WARNING:
 		{
@@ -892,6 +963,8 @@ void loop()
 				lcd_write(1,1, "a chosen band!");	
 				lcd_write(2,2, "Press \"Menu\"");	
 				state_initialised = 1;
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50);
 			}
 			
 			if(menu_pressed())
@@ -900,7 +973,7 @@ void loop()
 				state = DATE_FORMAT;
 				goto end;
 			}
-			
+			break;
 		}//end of OTHER_BAND_WARNING
 		
 		case DATE_FORMAT:
@@ -927,8 +1000,13 @@ void loop()
 			
 			if(edit_pressed())
 			{
-				if(date_format != GLOBAL) date_format = (date_t)((int)date_format+1);
-				else date_format = BRITISH;
+				switch(date_format)
+				{
+					case BRITISH: date_format = AMERICAN; break;
+					case AMERICAN: date_format = GLOBAL; break;
+					case GLOBAL: date_format = BRITISH; break;
+					default: date_format = BRITISH; break; //I write the code, I pick the standard format
+				};
 				lcd_write(1,0, date_strings[date_format]);
 				while(edit_pressed())delay(50);	
 			}
@@ -951,6 +1029,9 @@ void loop()
 			if(digitalRead(GPS_PPS))
 			{
 				state_clean();
+				while(GPS.available()) gps.encode(GPS.read());
+				maidenhead(gps, locator);
+				
 				#if SKIP_CALIBRATION
 					state = ENCODING;
 				#else
@@ -971,7 +1052,8 @@ void loop()
 		
 		case ENCODING:
 		{
-			switch (WSPR::encode(callsign, locator, power, symbols, WSPR_NORMAL))
+			PC.println(locator);
+			switch (WSPR::encode(callsign, locator, power_dbm[power], symbols, WSPR_NORMAL))
 			{
 				case 0: 
 				{
@@ -979,7 +1061,7 @@ void loop()
 					state_clean();
 					goto end;
 				}
-				case 21: 	if(WSPR::encode(callsign, locator,power,symbols, WSPR_EXTENDED) == 0)
+				case 21: 	if(WSPR::encode(callsign, locator, power_dbm[power],symbols, WSPR_EXTENDED) == 0)
 							{
 								state = HOME;
 								state_clean();
@@ -987,7 +1069,7 @@ void loop()
 							}
 							else panic("Something went very wrong", 22); //Think this should be impossible as all errors should have already been tested for
 							break;
-				default: 	panic("Something went very wrong", 22); //Think this should be impossible as all errors should have already been tested for
+				default: 	panic((String) WSPR::encode(callsign, locator, power_dbm[power], symbols, WSPR_NORMAL)); //Think this should be impossible as all errors should have already been tested for
 							break;
 			};
 				
@@ -1076,8 +1158,13 @@ void loop()
 			static String new_locator;
 			String freq_string = "";
 			static uint32_t gps_watchdog = 0;
+			old_band = band;
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				lcd.createChar(0, gps_symbol);
+				lcd.createChar(1, crossed_t);
+				lcd.createChar(2, crossed_x);
+				
 				lcd_write(0,0, callsign);
 				lcd_write(0,10, locator);
 				int seed = 0;
@@ -1089,16 +1176,30 @@ void loop()
 				randomSeed(seed);	
 				lcd_write(1,0, band_strings[band]);
 				tx_frequency = band_freq[band] + 1400 + random(20,180);
-				
+				old_band = band;
 				RPI.print("SRX - " + band_strings[band] +";\n");
 				lcd_write(1,14, "RX");
-				lcd_write(1,7, watt_strings[power]);
+				
+				for(int i = 0; i<12; i++)
+					PC.print((String)tx_disable[i] + " ");
+				
+				
+				if(tx_disable[band])
+				{
+					lcd.setCursor(1,11);
+					lcd.print('\1');
+					lcd.print('\2');
+				}
+				else
+					lcd_write(1,11,"  ");
+				
+				lcd_write(1,5, watt_strings[power]);
 				
 				while(menu_pressed()) delay(50);
 				while(edit_pressed()) delay(50);
 				new_locator.reserve(6);
 				
-				lcd.createChar(0, gps_symbol);
+				
 				gps_watchdog = 0;
 				state_initialised=1;
 			}
@@ -1122,7 +1223,7 @@ void loop()
 						osc.disable_clock(0);
 						substate = 0;
 						old_substate = 0;
-						if(extended_mode) send_extended ^=1; //if we're using two packet messages, send the other one next time
+						if(extended_mode) send_extended  = !send_extended; //if we're using two packet messages, send the other one next time
 						digitalWrite(LED,LOW);
 						lcd_write(1,14,"RX");
 						RPI.print("SRX - " + freq_string +";\n");
@@ -1177,6 +1278,7 @@ void loop()
 					lcd_write(0,10, locator);
 				}
 				
+				
 				static int old_time = 0;
 				if(old_time != gps.time.value());
 				{
@@ -1188,12 +1290,30 @@ void loop()
 					sprintf(temp, "%02i", gps.time.minute());
 					lcd.print(temp);
 					
-					if((gps.time.second() == 0) && ((gps.time.minute()%2) == 0) && (substate == 0)) //Start of new WSPR frame
+					band = band_array[gps.time.hour()];
+					if(band != old_band)
+					{
+							if(tx_disable[band])
+							{
+								lcd.setCursor(1,11);
+								lcd.print('\1');
+								lcd.print('\2');
+							}
+							else
+								lcd_write(1,11,"  ");
+							
+							lcd_write(1,0, band_strings[band]);
+							tx_frequency = band_freq[band] + 1400 + random(20,180);
+							
+							RPI.print("SRX - " + band_strings[band] +";\n");
+							lcd_write(1,14, "RX");
+							old_band = band;
+					}
+					
+					
+					if((gps.time.second() == 0) && ((gps.time.minute()%2) == 0) && (substate == 0) && (tx_disable[band] == 0)) //Start of new WSPR frame
 					{
 						int x = random(100);
-						PC.print(x);
-						PC.print(" ");
-						PC.println(tx_percentage);
 						if(x < tx_percentage) //TX next frame
 						{
 							digitalWrite(LED, HIGH);
@@ -1210,6 +1330,23 @@ void loop()
 					}
 				}
 				
+				if(time_requested)
+				{
+					RPI.print("T");
+					RPI.print(gps.date.day());
+					RPI.print("/");
+					RPI.print(gps.date.month());
+					RPI.print("/");
+					RPI.print(gps.date.year());
+					RPI.print(" ");
+					RPI.print(gps.time.hour());
+					RPI.print(":");
+					RPI.print(gps.time.minute());
+					RPI.print(":");
+					RPI.print(gps.time.second());
+					RPI.print(";\n");
+					time_requested = 0;
+				}
 				static int old_date = 0;
 				if(old_date != gps.date.value());
 				{
@@ -1314,23 +1451,25 @@ end:
 							RPI.print(tx_percentage);
 							RPI.print(";\n");
 							break;
+							
 				case 'T':	if(!gps_enabled) panic("PI requesting time and GPS is disabled");
-							RPI.print("T");
-							RPI.print(gps.date.day());
-							RPI.print("/");
-							RPI.print(gps.date.month());
-							RPI.print("/");
-							RPI.print(gps.date.year());
-							RPI.print(" ");
-							RPI.print(gps.time.hour());
-							RPI.print(":");
-							RPI.print(gps.time.minute());
-							RPI.print(":");
-							RPI.print(gps.time.second());
-							RPI.print(";\n");
+							time_requested = 1;
 							break;
+							
 				case 'S':	RPI.print("SHello world :);\n"); break; //TODO, this needs to be handled better
 				case 'V': 	RPI.print("V"+VERSION+";\n");
+				case 'U':	//Indicates to shutdown for Pi to upgrade, deliberate fallthrough as handling is same as for PIC firmware upgrade
+				case 'F':	if(state == HOME && substate > 0) //we are transmitting
+							{
+								detachCoreTimerService(tx); //stop transmitting
+								osc.disable_clock(0);
+							}
+							RPI.print(rx_string[0]+";\n"); //Acknoledge we are ready to be reset
+							lcd_write(1,0, "Upgrading " + (rx_string[0] == 'U' ? (String)"RPi" : (String)"PIC"));
+							lcd_write(0,1, blank_line);
+							lcd_write(0,2, blank_line);
+							while(1); //shut everything down and wait to be reset
+							break; 
 				default: panic("Received unknown character from Pi" + rx_string, 19);
 			};
 		}
