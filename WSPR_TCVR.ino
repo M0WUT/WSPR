@@ -435,7 +435,6 @@ void loop()
 							warning = 0;
 							lcd_write(2,0,blank_line);
 						}
-						
 						lcd.setCursor(1,substate);		
 						break;
 					} 
