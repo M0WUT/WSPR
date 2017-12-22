@@ -937,6 +937,15 @@ void loop()
 			{
 				state_clean();
 				tx_disable[band_array[0]] = 0;
+				eeprom.write(EEPROM_TX_DISABLE_BASE_ADDRESS + (int) band_array[0], 0); 	
+				RPI.print('D');
+				for(int i = 0; i < 11; i++)
+				{
+					RPI.print(tx_disable[i]);
+					RPI.print(',');
+				}
+				RPI.print(tx_disable[11]);
+				RPI.print(";\n");
 				state = OTHER_BAND_WARNING;
 			}
 			
@@ -1447,6 +1456,16 @@ end:
 							RPI.print(";\n");
 							break;	
 							
+				case 'D':	RPI.print('D');
+							for(int i = 0; i < 11; i++)
+							{
+								RPI.print(tx_disable[i]);
+								RPI.print(',');
+							}
+							RPI.print(tx_disable[11]);
+							RPI.print(";\n");
+							break;
+							
 				case 'X':  	RPI.print("X");
 							RPI.print(tx_percentage);
 							RPI.print(";\n");
@@ -1506,6 +1525,19 @@ end:
 							}
 							panic("Invalid power specified");
 							break;
+							
+				case 'D': 	for (int i = 0; i<12; i++)
+							{
+								int x = data[2*i] - '0'; //2*i as comma seperated, then converted to int
+								if (x==0 or x == 1)
+								{
+									tx_disable[i] = x;
+									eeprom.write(EEPROM_TX_DISABLE_BASE_ADDRESS + i, x);
+								}
+								else panic("Invalid Disable value supplied");
+							}
+							break;
+							
 				case 'B': 	for (int i = 0; i<24; i++)
 							{
 								int x = data[2*i] - '0'; //2*i as comma seperated, then converted to int
