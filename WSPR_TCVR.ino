@@ -1,5 +1,6 @@
 #include "WSPR_config.h"
 
+
 const String VERSION = "0.1"; //Please don't touch this, everything will be fine but you might make the auto-updater unhappy
 
 String callsign="M0WUT";
