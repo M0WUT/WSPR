@@ -5,7 +5,7 @@
 /*    I2C  implemenation                                                */
 /*                                                                      */
 /************************************************************************/
-/*    Author:     Keith Vogel, modified by Dan McGraw                   */
+/*    Author:     Keith Vogel                                           */
 /*    Copyright 2014, Digilent Inc.                                     */
 /************************************************************************/
 /*
@@ -43,14 +43,15 @@
 /************************************************************************/
 /*  Revision History:                                                   */
 /*    8/4/2014(KeithV): Created                                         */
-/*	  8/7/2017(M0WUT): Modified to use second I2C bus on PIC32MX250F128D
 /************************************************************************/
-#include <DTWI.h>
+// DTWI is not on the path and we don't want the user to have
+// to explicitly include the library. So just grab it and compile it
+#include "../DTWI/DTWI.cpp"
 #define ENABLE_END
-#include "Wire2.h"
+#include <Wire.h>
 
 DTWI1 di2c;
-TwoWire Wire2;
+TwoWire Wire;
 
 // Initialize Class Variables //////////////////////////////////////////////////
 
@@ -73,10 +74,9 @@ static void (*onReceiveServiceR) (uint8_t*, int) = NULL;
 static void (*onRequestServiceR)(void)           = NULL;
 static uint32_t iSessionCur                     = 0xFF;
 
-static void onI2C(int id, void * tptr)
+static void onI2C(int id __attribute__((unused)), void * tptr __attribute__((unused)))
 {
     DTWI::I2C_STATUS status = di2c.getStatus();
-    uint8_t data;
 
     if(status.fSlave)
     {
@@ -183,16 +183,22 @@ void TwoWire::begin(int address)
 
 uint8_t TwoWire::requestFrom(uint8_t address, uint8_t quantity)
 {
-    DTWI::I2C_STATUS status;
+    DTWI::I2C_STATUS i2cStatus = di2c.getStatus();
+
+    // see if the bus is already in use
+    if(i2cStatus.fBusInUse && !i2cStatus.fMyBus)
+    {
+        return(0);
+    }
 
     // may have to wait for the last action to finish before
     // a repeated start can occur
-    while(!di2c.startMasterRead(address, quantity));
+    while(!di2c.startMasterRead(address, quantity) && di2c.getStatus().fMyBus);
 
     do
     {
-        status = di2c.getStatus();
-    } while(status.fMyBus && !status.fNacking);
+        i2cStatus = di2c.getStatus();
+    } while(i2cStatus.fMyBus && !i2cStatus.fNacking);
 
     while(!di2c.stopMaster());
 
@@ -206,7 +212,17 @@ uint8_t TwoWire::requestFrom(int address, int quantity)
 
 void TwoWire::beginTransmission(uint8_t address)
 {
-    while(!di2c.startMasterWrite(address));
+    DTWI::I2C_STATUS i2cStatus = di2c.getStatus();
+
+    // if someone else has the bus, then we won't get it; get out
+    if(i2cStatus.fBusInUse  && !i2cStatus.fMyBus)
+    {
+        return;
+    }
+   
+    // we only want to loop on this with a repeated start
+    // otherwise it will pass on the first try 
+    while(!di2c.startMasterWrite(address) && di2c.getStatus().fMyBus);
 }
 
 void TwoWire::beginTransmission(int address)
@@ -214,18 +230,58 @@ void TwoWire::beginTransmission(int address)
   beginTransmission((uint8_t)address);
 }
 
-uint8_t TwoWire::endTransmission(void)
+uint8_t TwoWire::endTransmission(uint8_t fStopBit)
 {
-    while(!di2c.stopMaster());
+    uint8_t retStatus = 0;
+    DTWI::I2C_STATUS i2cStatus;
+
+    // if not my bus, then the beginMaster failed and we either had
+    // a collision or the slave acked, in either case report a NACK from the slave
+    if(!di2c.getStatus().fMyBus)
+    {
+        return(2);
+    }
+
+    // wait for the transmit buffer is empty 
+    while(di2c.getStatus().fWrite && di2c.transmitting() != 0);
+
+    // Get the current status
+    i2cStatus = di2c.getStatus();
+
+    // what happened to the bus, we use to have it?
+    // other error
+    if(!i2cStatus.fMyBus)
+    {
+        return(4);      
+    }
+
+    // we have the bus, but not writing
+    // the otherside NACKed our Write
+    else if(!i2cStatus.fWrite)
+    {
+            retStatus = 3;
+    }
+
+    // put a stop bit out if we are not going to attempt a repeated start
+    if(fStopBit)
+    {
+        while(!di2c.stopMaster());
+    }
+
+    return(retStatus);
 }
 
+uint8_t TwoWire::endTransmission(void)
+{
+    return(endTransmission(true));
+}
 
 // must be called in:
 // slave tx event callback
 // or after beginTransmission(address)
 int TwoWire::write(uint8_t data)
 {
-    di2c.write((const byte *) &data, 1);
+    return(di2c.write((const byte *) &data, 1));
 }
 void TwoWire::send(uint8_t data) { write(data); }
 
@@ -234,8 +290,7 @@ void TwoWire::send(uint8_t data) { write(data); }
 // or after beginTransmission(address)
 int TwoWire::write(uint8_t* data, uint8_t quantity)
 {
-    di2c.write((const byte *) data, quantity);
-    return 1;
+    return(di2c.write((const byte *) data, quantity));
 }
 void TwoWire::send(uint8_t* data, uint8_t quantity) { write(data, quantity); }
 
@@ -244,7 +299,7 @@ void TwoWire::send(uint8_t* data, uint8_t quantity) { write(data, quantity); }
 // or after beginTransmission(address)
 int TwoWire::write(char* data)
 {
-    return write((uint8_t*)data, strlen(data));
+    return(write((uint8_t*) data, strlen(data)));
 }
 void TwoWire::send(char* data) { write(data); }
 
@@ -253,7 +308,7 @@ void TwoWire::send(char* data) { write(data); }
 // or after beginTransmission(address)
 int TwoWire::write(int data)
 {
-    return write((uint8_t)data);
+    return(write((uint8_t) data));
 }
 void TwoWire::send(int data) { write(data); }
 
@@ -266,7 +321,7 @@ uint8_t TwoWire::available(void)
 }
 
 uint8_t TwoWire::receive(void) {
-	return read();
+	return(read());
 }
 
 // must be called in:
@@ -285,7 +340,7 @@ uint8_t TwoWire::read(void)
 }
 
 // behind the scenes function that is called when data is received
-void TwoWire::onReceiveService(uint8_t* inBytes, int numBytes)
+void TwoWire::onReceiveService(uint8_t* inBytes __attribute__((unused)), int numBytes)
 {
   // don't bother if user hasn't registered a callback
   if(!user_onReceive){

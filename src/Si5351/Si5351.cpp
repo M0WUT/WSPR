@@ -39,29 +39,31 @@ unsigned int Si5351::bc_solve(double x0, uint64_t &num, uint64_t &den)
 
 void Si5351::stopTransmission()
 {
-	switch(Wire2.endTransmission())
+	
+	switch(Wire.endTransmission())
 		{
-			//case 0: break;
-			//case 1: panic("Data does not fit in TX buffer"); break;
-			//case 2: panic("I2C device not responding"); break;
-			//case 3: panic("I2C responding but not acknowledging data"); break;
-			//default: panic("Unrecognised I2C error, WTF did you do??");
-			default: break;
+			case 0: break;
+			case 1: panic("Data does not fit in TX buffer"); break;
+			case 2: panic("I2C device not responding"); break;
+			case 3: panic("I2C responding but not acknowledging data"); break;
+			default: panic("Unrecognised I2C error, WTF did you do??");
 		}
+	
+	
 }
 
 uint8_t Si5351::I2C_read(uint8_t address)
 {
 	uint8_t return_value;
-	Wire2.beginTransmission(Si5351_ADDRESS);
-	Wire2.write(address);
+	Wire.beginTransmission(Si5351_ADDRESS);
+	Wire.send(address);
 	stopTransmission();
 
-	Wire2.requestFrom(Si5351_ADDRESS, 1);
+	Wire.requestFrom(Si5351_ADDRESS, 1);
 	
-	while(Wire2.available())
+	while(Wire.available())
 	{
-		return_value = Wire2.read();
+		return_value = Wire.read();
 	}
 	return return_value;
 	
@@ -145,27 +147,27 @@ void Si5351::set_freq(uint8_t clock, uint8_t pll, double target_frequency)
 
 void Si5351::I2C_write(uint8_t address, uint8_t data)
 {
-	Wire2.beginTransmission(Si5351_ADDRESS);
-	Wire2.write(address);
-	Wire2.write(data);
+	Wire.beginTransmission(Si5351_ADDRESS);
+	Wire.send(address);
+	Wire.send(data);
 	stopTransmission();
 }
 
 void Si5351::I2C_write(uint8_t address, uint8_t *data, uint8_t length)
 {
-	Wire2.beginTransmission(Si5351_ADDRESS);
-	Wire2.write(address);
-	Wire2.write(data, length);
+	Wire.beginTransmission(Si5351_ADDRESS);
+	Wire.send(address);
+	Wire.send(data, length);
 	stopTransmission();
 }
 
 void Si5351::I2C_write(uint8_t address, uint8_t data, uint8_t length)
 {
-	Wire2.beginTransmission(Si5351_ADDRESS);
-	Wire2.write(address);
+	Wire.beginTransmission(Si5351_ADDRESS);
+	Wire.send(address);
 	for(int i=0; i<length; i++)
 	{
-		Wire2.write(data);
+		Wire.send(data);
 	}
 	stopTransmission();
 }
@@ -260,7 +262,7 @@ void Si5351::set_PLL(uint8_t pll, uint64_t xtal_frequency, uint32_t target_pll_o
 void Si5351::begin(si5351_capacitance xtal_cap, uint32_t xtal_freq, int32_t correction)
 { 
 	
-	Wire2.begin();
+	Wire.begin();
 	
 	/////////////////////
 	//Reset all outputs//

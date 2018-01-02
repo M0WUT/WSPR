@@ -93,7 +93,7 @@ void setup()
 	pinMode(PI_WATCHDOG, INPUT);
 	digitalWrite(LED, LOW);
 
-	//osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
+	osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
 	
 	callsign.reserve(11);
 	old_callsign.reserve(11);
@@ -1476,7 +1476,7 @@ end:
 							break;
 							
 				case 'S':	RPI.print("SHello world :);\n"); break; //TODO, this needs to be handled better
-				case 'V': 	RPI.print("V"+VERSION+";\n");
+				case 'V': 	RPI.print("V"+VERSION+";\n"); break;
 				case 'U':	//Indicates to shutdown for Pi to upgrade, deliberate fallthrough as handling is same as for PIC firmware upgrade
 				case 'F':	if(state == HOME && substate > 0) //we are transmitting
 							{

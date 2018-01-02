@@ -1,4 +1,4 @@
-#include "src/DogLcd/DogLcd.h"
+#include "config.h"
 
 #define DOT_DELAY 250 // Time that 1 dot lasts in ms
 
