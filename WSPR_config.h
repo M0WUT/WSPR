@@ -17,9 +17,8 @@
 #define GPS Serial1
 #define PC Serial
 #define RPI Serial0
-#define SECOND 6e5 //Rough number of loops per second, a counter up to this value will take (VERY) roughly 1 second
+#define TIMEOUT 2000 //Timeout for Pi traffic in ms
 #define LED 1
-#define TIMEOUT 2*SECOND
 #define TIMER_ENABLED 1<<15
 #define NO_PRESCALER 0
 #define MODE_32_BIT_TIMER 1<<3
@@ -38,7 +37,7 @@
 //////////////////////
 
 #define DEBUG 1 //set to 0 for normal mode
-#define SKIP_CALIBRATION 1
+#define SKIP_CALIBRATION 0
 
 //////////////////////////////
 //Memory Addresses in EEPROM//

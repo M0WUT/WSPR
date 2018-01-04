@@ -56,7 +56,7 @@ uint8_t Si5351::I2C_read(uint8_t address)
 {
 	uint8_t return_value;
 	Wire.beginTransmission(Si5351_ADDRESS);
-	Wire.send(address);
+	Wire.write(address);
 	stopTransmission();
 
 	Wire.requestFrom(Si5351_ADDRESS, 1);
@@ -148,26 +148,26 @@ void Si5351::set_freq(uint8_t clock, uint8_t pll, double target_frequency)
 void Si5351::I2C_write(uint8_t address, uint8_t data)
 {
 	Wire.beginTransmission(Si5351_ADDRESS);
-	Wire.send(address);
-	Wire.send(data);
+	Wire.write(address);
+	Wire.write(data);
 	stopTransmission();
 }
 
 void Si5351::I2C_write(uint8_t address, uint8_t *data, uint8_t length)
 {
 	Wire.beginTransmission(Si5351_ADDRESS);
-	Wire.send(address);
-	Wire.send(data, length);
+	Wire.write(address);
+	Wire.write(data, length);
 	stopTransmission();
 }
 
 void Si5351::I2C_write(uint8_t address, uint8_t data, uint8_t length)
 {
 	Wire.beginTransmission(Si5351_ADDRESS);
-	Wire.send(address);
+	Wire.write(address);
 	for(int i=0; i<length; i++)
 	{
-		Wire.send(data);
+		Wire.write(data);
 	}
 	stopTransmission();
 }

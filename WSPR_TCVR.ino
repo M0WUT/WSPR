@@ -15,10 +15,12 @@ Si5351 osc;
 TinyGPSPlus gps;
 DogLcd lcd(21, 20, 24, 22); //I don't know why it's called that, not my library!
 LC640 eeprom(EEPROM_CS);
-bool calibration_flag, pi_rx_flag, state_initialised=0, editing_flag=0, warning = 0, gps_enabled=1, extended_mode = 0, valid_ip = 0; //flags used to indicate to the main loop that an interrupt driven event has completed
+bool calibration_flag, state_initialised=0, editing_flag=0, warning = 0, gps_enabled=1, extended_mode = 0, valid_ip = 0;//flags used to indicate to the main loop that an interrupt driven event has completed
+volatile bool heartbeat_requested = 0, seconds_tick = 0; 
 uint32_t calibration_value; //Contains the number of pulses from 2.5MHz ouput of Si5351 in 80 seconds (should be 200e6) 
 int substate=0;
-uint32_t watchdog_counter = 0; //Used to detect server timeout (i.e. server crash detection!)
+volatile uint32_t watchdog_time = 0; //Used to detect server timeout (i.e. server crash detection!)
+volatile uint32_t gps_watchdog_time = 0; //Used to detect loss of GPS lock
 uint8_t gps_symbol[7] = {14,27,17,27,14,14,4}; //I would have made this const but threw type errors and had better things to do than edit someone else's library
 uint8_t crossed_t[7] = {
 	0b11111,
@@ -173,10 +175,10 @@ bool callsign_check()
 
 void check_frequency()
 {
-	
+	seconds_tick = 1;
 	static int counter = 0;
-	counter++;
-	if(counter==80)
+	gps_watchdog_time = millis();
+	if(++counter >= 80)
 	{
 		calibration_value = TMR2;
 		TMR2 = 0;
@@ -196,9 +198,10 @@ bool edit_pressed()
 	return !digitalRead(EDIT_BTN);
 }
 
-void clear_watchdog()
+void heartbeat()
 {
-	watchdog_counter = 0;
+	heartbeat_requested = 1;
+	watchdog_time = millis();
 }
 
 uint32_t tx (uint32_t currentTime)
@@ -209,7 +212,7 @@ uint32_t tx (uint32_t currentTime)
 
 void loop()
 {
-	if(calibration_flag) //GPS calibration has been updated 
+	if(calibration_flag && state != CALIBRATING) //GPS calibration has been updated 
 	{
 		#if DEBUG
 			PC.println(calibration_value);
@@ -228,9 +231,15 @@ void loop()
 		calibration_flag = 0;
 	}
 	
+	if(heartbeat_requested)
+	{
+		RPI.print("A;\n");
+		heartbeat_requested = 0;
+	}
+	
 	if (state != START)
 	{
-		if(++watchdog_counter > TIMEOUT) //Server has died
+		if(millis() - watchdog_time > 8000) //Server has died
 		{
 			PC.println("Server dead :(");
 			if(state == HOME && substate > 0) //we are transmitting
@@ -244,6 +253,7 @@ void loop()
 		}
 		
 	}
+	
 	switch (state) //going to attempt to implement as a state machine, sure M0IKY will have some complaints to make 
 	{
 		case START: //Note this first state isn't quite the same as the others as it is blocking. This is becuase the UART doesn't need checking if the server is not running
@@ -252,7 +262,7 @@ void loop()
 			lcd_write(1,0, "server to start");
 			bool old_watchdog = digitalRead(PI_WATCHDOG);
 			eeprom.read(EEPROM_CALLSIGN_BASE_ADDRESS);
-			if(eeprom.read(EEPROM_CALLSIGN_BASE_ADDRESS) == 0) state = UNCONFIGURED; //No valid data in EEPROM
+			if(letters_find(eeprom.read(EEPROM_CALLSIGN_BASE_ADDRESS)) == -1) state = UNCONFIGURED; //No valid data in EEPROM
 			else
 			{	
 				//Load everything from EEPROM
@@ -294,7 +304,7 @@ void loop()
 				for(int i = 0; i<24; i++)
 					band_array[i] = (band_t) eeprom.read(EEPROM_BAND_BASE_ADDRESS + i);
 				
-				state = CALLSIGN;
+				state = IP;
 			}
 			
 			while(old_watchdog == digitalRead(PI_WATCHDOG)) //Wait until server starts i.e. watchdog pin changes
@@ -312,7 +322,7 @@ void loop()
 				delay(1000);
 				lcd_write(2,0,blank_line);
 			}
-			attachInterrupt(1, clear_watchdog, RISING); //INT1 is on RB14, will reset the watchdog timeout everytime the pin goes high.
+			attachInterrupt(1, heartbeat, RISING); //INT1 is on RB14, will reset the watchdog timeout everytime the pin goes high.
 			state_clean();
 			digitalWrite(LED,LOW);
 			goto end;
@@ -544,13 +554,13 @@ void loop()
 
 			if(edit_pressed())
 			{ 
-				int counter =0;
+				int start_time = millis();
 				while(edit_pressed())
 				{	
-					if(++counter>(2*SECOND))
+					if(millis() - start_time > 2000)
 					{
 						gps_enabled = !gps_enabled;
-						counter=0;
+						start_time = millis();
 						editing_flag=0;
 						
 						if(!gps_enabled)
@@ -830,9 +840,12 @@ void loop()
 			
 			if(ip_address == "0.0.0.0" || hostname == "deadbeef") //Wait for defaults to be overwritten
 			{
-				for(int counter =0; !RPI.available(); counter++)
+				int start_time = millis();
+				while(!RPI.available())
 				{
-					if(counter > TIMEOUT) panic("Pi not responding", 19);
+					if(millis() - start_time > 5000)
+						panic("Pi not responding", 18);
+
 				}
 				goto end;
 			}
@@ -1066,7 +1079,7 @@ void loop()
 			{
 				case 0: 
 				{
-					state=HOME;
+					state = HOME;
 					state_clean();
 					goto end;
 				}
@@ -1081,14 +1094,17 @@ void loop()
 				default: 	panic((String) WSPR::encode(callsign, locator, power_dbm[power], symbols, WSPR_NORMAL)); //Think this should be impossible as all errors should have already been tested for
 							break;
 			};
+			break;
 				
 			
 		}//end of ENCODING
 		
 		case CALIBRATING:
 		{
+			static int i = 160;
 			if(!state_initialised)
 			{
+				i=160;
 				RPI.print("SCalibrating - roughly 160 seconds remaining;\n");
 				osc.set_freq(2,1,2500000.0);
 				lcd_write(0,2, "Calibrating");
@@ -1100,21 +1116,21 @@ void loop()
 				PR2 = 0xFFFFFFFF;
 				T2CKR = PIN_A0;
 				T2CON = (TIMER_ENABLED | NO_PRESCALER | MODE_32_BIT_TIMER | EXTERNAL_SOURCE);
-				//attachInterrupt(GPS_PPS_INTERRUPT, check_frequency, RISING);
+				attachInterrupt(GPS_PPS_INTERRUPT, check_frequency, RISING);
 				state_initialised = 1;
 				while(menu_pressed()) delay(50); //Wait for any previous button press to clear (written here so the display updates before debouncing)
 			}
 		
-			static int i = 160;
-			static int counter = 0;
 			
-			if(++counter > SECOND) //nicer way of doing it than using delay as state machines don't like blocking
+
+			
+			if(seconds_tick) //nicer way of doing it than using delay as state machines don't like blocking
 			{
+				seconds_tick = 0;
 				if(i>0) i--;
-				counter = 0;
 				lcd.setCursor(2,6);
-				if(i<100) lcd.print('0');
-				if(i<10) lcd.print('0');
+				if(i<100) lcd.print(' ');
+				if(i<10) lcd.print(' ');
 				lcd.print(i);
 				RPI.print("SCalibrating - roughly ");
 				RPI.print(i);
@@ -1123,6 +1139,7 @@ void loop()
 		
 			if(calibration_flag) //Calibration complete
 			{
+				PC.println(calibration_value);
 				if(substate == 0) //First reading is always wrong for some reason
 				{
 					calibration_value = 0;
@@ -1132,8 +1149,9 @@ void loop()
 				else
 				{
 					static int error = 0;
-					if(abs(200e6 - calibration_value) > 10e3)
+					if(abs(200000000 - calibration_value) > 10000)
 					{
+						PC.println("Calibration count out of range");
 						if(++error == 3) panic("Invalid calibration signal", 20);
 						else
 						{
@@ -1142,7 +1160,6 @@ void loop()
 							lcd_write(0,3, " calibration ");
 							lcd_write(1,0, "failed. Retry in");
 							i=80;
-							counter = 0;
 						}
 					}
 					else
@@ -1166,10 +1183,10 @@ void loop()
 		{
 			static String new_locator;
 			String freq_string = "";
-			static uint32_t gps_watchdog = 0;
 			old_band = band;
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
+				osc.set_freq(0, 0, 56382400); //DEBUG
 				lcd.createChar(0, gps_symbol);
 				lcd.createChar(1, crossed_t);
 				lcd.createChar(2, crossed_x);
@@ -1189,10 +1206,7 @@ void loop()
 				RPI.print("SRX - " + band_strings[band] +";\n");
 				lcd_write(1,14, "RX");
 				
-				for(int i = 0; i<12; i++)
-					PC.print((String)tx_disable[i] + " ");
-				
-				
+								
 				if(tx_disable[band])
 				{
 					lcd.setCursor(1,11);
@@ -1208,8 +1222,7 @@ void loop()
 				while(edit_pressed()) delay(50);
 				new_locator.reserve(6);
 				
-				
-				gps_watchdog = 0;
+				gps_watchdog_time = millis();
 				state_initialised=1;
 			}
 			
@@ -1248,7 +1261,7 @@ void loop()
 			}
 			if(gps_enabled)
 			{
-				if(++gps_watchdog > (10*SECOND))
+				if(millis() - gps_watchdog_time > 10000)
 				{
 					state_clean();
 					state = UNLOCKED;
@@ -1256,24 +1269,12 @@ void loop()
 				}
 				
 				static bool gps_flag=0;
+				
 				if (digitalRead(GPS_PPS))
 				{
-					if(!gps_flag) 
-					{
-						lcd.setCursor(2,15);
-						lcd.print('\0');
-						gps_flag = 1;
-					}
-					gps_watchdog = 0;
+					lcd_write(2,15, ++gps_flag ? '\0' : " "); 
 				}
-				else 
-				{
-					if(gps_flag)
-					{
-						lcd_write(2,15," ");
-						gps_flag = 0;
-					}
-				}
+				
 				
 				while(GPS.available())
 				{
@@ -1291,25 +1292,15 @@ void loop()
 				static int old_time = 0;
 				if(old_time != gps.time.value());
 				{
-					char temp[2];
+					char temp[5];
 					lcd.setCursor(2,9);
-					sprintf(temp, "%02i", gps.time.hour());
-					lcd.print(temp);
-					lcd.print(':');
-					sprintf(temp, "%02i", gps.time.minute());
+					sprintf(temp, "%02i:%02i", gps.time.hour(),gps.time.minute());
 					lcd.print(temp);
 					
 					band = band_array[gps.time.hour()];
 					if(band != old_band)
 					{
-							if(tx_disable[band])
-							{
-								lcd.setCursor(1,11);
-								lcd.print('\1');
-								lcd.print('\2');
-							}
-							else
-								lcd_write(1,11,"  ");
+							lcd_write(1,11, (tx_disable[band]) ? "\1\2" : "  "); // \1 and \2 are t and x with a score through them as stored in the lcd memory to indicated tx disabled for this band
 							
 							lcd_write(1,0, band_strings[band]);
 							tx_frequency = band_freq[band] + 1400 + random(20,180);
@@ -1360,52 +1351,18 @@ void loop()
 				if(old_date != gps.date.value());
 				{
 					old_date = gps.date.value();
-					char temp[2];
+					char temp[8];
 					lcd.setCursor(2,0);
 					switch (date_format)
 					{
-						case BRITISH:
-						{
-							sprintf(temp, "%02i", gps.date.day());
-							lcd.print(temp);
-							lcd.print('/');
-							sprintf(temp, "%02i", gps.date.month());
-							lcd.print(temp);
-							lcd.print('/');
-							sprintf(temp, "%02i", gps.date.year()%100);
-							lcd.print(temp);
-							break;
-						}
-						case AMERICAN:
-						{
-							sprintf(temp, "%02i", gps.date.month());
-							lcd.print(temp);
-							lcd.print('/');
-							sprintf(temp, "%02i", gps.date.day());
-							lcd.print(temp);
-							lcd.print('/');
-							sprintf(temp, "%02i", gps.date.year()%100);
-							lcd.print(temp);
-							break;
-						}
-						case GLOBAL:
-						{
-							sprintf(temp, "%02i", gps.date.year()%100);
-							lcd.print(temp);
-							lcd.print('/');
-							sprintf(temp, "%02i", gps.date.month());
-							lcd.print(temp);
-							lcd.print('/');
-							sprintf(temp, "%02i", gps.date.day());
-							lcd.print(temp);
-							break;
-						}
-					};		
+						case BRITISH: sprintf(temp, "%02i/%02i/%02i", gps.date.day(),gps.date.month(),gps.date.year()%100); break;					
+						case AMERICAN: sprintf(temp, "%02i/%02i/%02i", gps.date.month(),gps.date.day(),gps.date.year()%100); break;
+						case GLOBAL: sprintf(temp, "%02i/%02i/%02i", gps.date.year()%100,gps.date.month(),gps.date.day()); break;
+					};	
+					lcd.print(temp);					
 				}//end of updating date	
-				
-				break;
 			}//end of GPS stuff
-			
+			break;	
 		}//end of HOME	
 	} //end of state machine
 end:
@@ -1427,8 +1384,12 @@ end:
 		while(x != '\n')
 		{
 			rx_string += x;
-			for(int counter = 0; !RPI.available(); ++counter)
-				if(counter > TIMEOUT) panic("Pi not responding", 18);
+			int start_time = millis();
+			while(!RPI.available())
+				if(millis() - start_time > 2000) 
+				{
+					panic("Pi not responding 1", 18);
+				}
 			x = RPI.read();	
 		}
 		
@@ -1436,7 +1397,6 @@ end:
 		int terminator_index = rx_string.indexOf(';');
 		if(rx_string_length != (terminator_index +1)) panic("Command not ; terminated"); //This also handles no ; present as indexOf returns -1 if not found and length != 0
 		
-		PC.print(rx_string);
 		if(rx_string_length == 2) //We are being requested data from
 		{
 			switch(rx_string[0])
@@ -1471,8 +1431,8 @@ end:
 							RPI.print(";\n");
 							break;
 							
-				case 'T':	if(!gps_enabled) panic("PI requesting time and GPS is disabled");
-							time_requested = 1;
+				case 'T':	if(gps_enabled)
+								time_requested = 1;
 							break;
 							
 				case 'S':	RPI.print("SHello world :);\n"); break; //TODO, this needs to be handled better
@@ -1483,10 +1443,12 @@ end:
 								detachCoreTimerService(tx); //stop transmitting
 								osc.disable_clock(0);
 							}
-							RPI.print(rx_string[0]+";\n"); //Acknoledge we are ready to be reset
-							lcd_write(1,0, "Upgrading " + (rx_string[0] == 'U' ? (String)"RPi" : (String)"PIC"));
-							lcd_write(0,1, blank_line);
-							lcd_write(0,2, blank_line);
+							RPI.print(rx_string[0]+";\n"); //Acknowledge we are ready to be reset
+							lcd_write(0,0, blank_line);
+							lcd_write(1,0, blank_line);
+							lcd_write(2,0, blank_line);
+							lcd_write(1,1, "Upgrading " + (rx_string[0] == 'U' ? (String)"RPi" : (String)"PIC"));
+							
 							while(1); //shut everything down and wait to be reset
 							break; 
 				default: panic("Received unknown character from Pi" + rx_string, 19);
@@ -1552,7 +1514,7 @@ end:
 				case 'X':	tx_percentage = atoi(data.c_str());
 							eeprom.write(EEPROM_TX_PERCENTAGE_ADDRESS, tx_percentage / 10);
 							break;
-				default: 	panic("Unexpected char received from Pi", 19);
+				default: 	panic("Unexpected char received from Pi" + rx_string, 19);
 			};	
 			if(state != IP) state_initialised = 0; //Re-initialise the state in case information has changed
 		}
