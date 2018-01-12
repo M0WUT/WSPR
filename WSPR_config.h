@@ -30,6 +30,10 @@
 #define EDIT_BTN 19
 #define EEPROM_CS 28
 #define PI_WATCHDOG 3
+#define BAND0 13
+#define BAND1 12
+#define BAND2 11
+#define TX 6
 
 
 //////////////////////
