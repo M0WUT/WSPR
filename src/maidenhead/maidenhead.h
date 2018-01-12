@@ -1,3 +1,6 @@
-#include "../TinyGPS/TinyGPS.h"
+#ifndef maidenheadH
+#define maidenheadH
+#include "../../WSPR_config.h"
 
-void maidenhead(TinyGPSPlus gps, String &locator);
+String maidenhead(TinyGPSPlus gps);
+#endif

@@ -14,7 +14,7 @@ char symbols2[162]; //Used to store more WSPR symbols in case of extended mode
 Si5351 osc;
 TinyGPSPlus gps;
 DogLcd lcd(21, 20, 24, 22); //I don't know why it's called that, not my library!
-LC640 eeprom(EEPROM_CS);
+
 bool calibration_flag, state_initialised=0, editing_flag=0, warning = 0, gps_enabled=1, extended_mode = 0, valid_ip = 0;//flags used to indicate to the main loop that an interrupt driven event has completed
 volatile bool heartbeat_requested = 0, seconds_tick = 0; 
 uint32_t calibration_value; //Contains the number of pulses from 2.5MHz ouput of Si5351 in 80 seconds (should be 200e6) 
@@ -277,17 +277,18 @@ void loop()
 			lcd_write(0,2,"Waiting for");
 			lcd_write(1,0, "server to start");
 			bool old_watchdog = digitalRead(PI_WATCHDOG);
-			eeprom.read(EEPROM_CALLSIGN_BASE_ADDRESS);
-			if(letters_find(eeprom.read(EEPROM_CALLSIGN_BASE_ADDRESS)) == -1) state = UNCONFIGURED; //No valid data in EEPROM
+			/*
+			//eeprom.read(//eeprom_CALLSIGN_BASE_ADDRESS);
+			if(letters_find(//eeprom.read(//eeprom_CALLSIGN_BASE_ADDRESS)) == -1) state = UNCONFIGURED; //No valid data in //eeprom
 			else
 			{	
-				//Load everything from EEPROM
+				//Load everything from //eeprom
 				
 				//Load callsign
 				callsign = "";
 				for(int i = 0; i < 10; i++)
 				{
-					char x = eeprom.read(EEPROM_CALLSIGN_BASE_ADDRESS + i);
+					char x = //eeprom.read(//eeprom_CALLSIGN_BASE_ADDRESS + i);
 					if(x == 0) break;
 					else callsign += x;
 				}
@@ -296,7 +297,7 @@ void loop()
 				locator = "";
 				for(int i = 0; i < 6; i++)
 				{
-					char x = eeprom.read(EEPROM_LOCATOR_BASE_ADDRESS + i);
+					char x = //eeprom.read(//eeprom_LOCATOR_BASE_ADDRESS + i);
 					if(x == 0) break;
 					else locator += x;
 				}
@@ -307,22 +308,22 @@ void loop()
 				}
 				else gps_enabled = 0;
 				
-				power = (power_t)eeprom.read(EEPROM_POWER_ADDRESS);
+				power = (power_t)//eeprom.read(//eeprom_POWER_ADDRESS);
 				
-				tx_percentage = 10 * eeprom.read(EEPROM_TX_PERCENTAGE_ADDRESS);
+				tx_percentage = 10 * //eeprom.read(//eeprom_TX_PERCENTAGE_ADDRESS);
 				
-				date_format = (date_t) eeprom.read(EEPROM_DATE_FORMAT_ADDRESS);
+				date_format = (date_t) //eeprom.read(//eeprom_DATE_FORMAT_ADDRESS);
 				
 				for(int i = 0; i<12; i++)
-					tx_disable[i] = eeprom.read(EEPROM_TX_DISABLE_BASE_ADDRESS + i) & 0x01;
+					tx_disable[i] = //eeprom.read(//eeprom_TX_DISABLE_BASE_ADDRESS + i) & 0x01;
 					
 					
 				for(int i = 0; i<24; i++)
-					band_array[i] = (band_t) eeprom.read(EEPROM_BAND_BASE_ADDRESS + i);
+					band_array[i] = (band_t) //eeprom.read(//eeprom_BAND_BASE_ADDRESS + i);
 				
 				state = IP;
 			}
-			
+			*/
 			while(old_watchdog == digitalRead(PI_WATCHDOG)) //Wait until server starts i.e. watchdog pin changes
 			{ 
 				static int dot_num = 0;
@@ -499,10 +500,10 @@ void loop()
 					{
 						//Update server
 						RPI.print("C"+callsign+";\n");
-						//and save to EEPROM
+						//and save to //eeprom
 						for (int i = 0; i< 10; i++)
 						{
-							eeprom.write(EEPROM_CALLSIGN_BASE_ADDRESS + i, (i<callsign.length() ? callsign[i] : 0));
+							//eeprom.write(//eeprom_CALLSIGN_BASE_ADDRESS + i, (i<callsign.length() ? callsign[i] : 0));
 						}
 					}
 					state=LOCATOR;
@@ -645,11 +646,11 @@ void loop()
 				{
 					//Update server
 					RPI.print("LGPS;\n");
-					//and save to EEPROM
+					//and save to //eeprom
 					String GPS_string = "GPS";
 					for (int i = 0; i< 6; i++)
 					{
-						eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<GPS_string.length() ? GPS_string[i] : 0));
+						//eeprom.write(//eeprom_LOCATOR_BASE_ADDRESS + i, (i<GPS_string.length() ? GPS_string[i] : 0));
 					}
 				}
 				state=POWER;
@@ -670,7 +671,7 @@ void loop()
 									RPI.print("L"+locator+";\n");
 									for (int i = 0; i< 6; i++)
 									{
-										eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<locator.length() ? locator[i] : 0));
+										//eeprom.write(//eeprom_LOCATOR_BASE_ADDRESS + i, (i<locator.length() ? locator[i] : 0));
 									}
 								}
 								state=POWER;
@@ -692,7 +693,7 @@ void loop()
 							RPI.print("L"+locator+";\n");
 							for (int i = 0; i< 6; i++)
 							{
-								eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<locator.length() ? locator[i] : 0));
+								;//eeprom.write(//eeprom_LOCATOR_BASE_ADDRESS + i, (i<locator.length() ? locator[i] : 0));
 							}
 						}
 						state=POWER;
@@ -777,7 +778,7 @@ void loop()
 				if(old_power != power)
 				{
 					RPI.print("P"+dbm_strings[power]+";\n");
-					eeprom.write(EEPROM_POWER_ADDRESS, power);	
+					//eeprom.write(//eeprom_POWER_ADDRESS, power);	
 				}
 				state= TX_PERCENTAGE;
 				goto end;
@@ -818,7 +819,7 @@ void loop()
 					RPI.print("X");
 					RPI.print(tx_percentage);
 					RPI.print(";\n");
-					eeprom.write(EEPROM_TX_PERCENTAGE_ADDRESS, tx_percentage / 10); //Can only be multiple of 10
+					//eeprom.write(//eeprom_TX_PERCENTAGE_ADDRESS, tx_percentage / 10); //Can only be multiple of 10
 				}
 				state = BAND;	
 				goto end;	
@@ -925,7 +926,7 @@ void loop()
 					{
 						RPI.print(band_array[i]);
 						RPI.print(',');
-						eeprom.write(EEPROM_BAND_BASE_ADDRESS + i, band_array[i]);
+						//eeprom.write(//eeprom_BAND_BASE_ADDRESS + i, band_array[i]);
 					}
 					RPI.print(band_array[23]);
 					RPI.print(";\n");
@@ -966,7 +967,7 @@ void loop()
 			{
 				state_clean();
 				tx_disable[band_array[0]] = 0;
-				eeprom.write(EEPROM_TX_DISABLE_BASE_ADDRESS + (int) band_array[0], 0); 	
+				//eeprom.write(//eeprom_TX_DISABLE_BASE_ADDRESS + (int) band_array[0], 0); 	
 				RPI.print('D');
 				for(int i = 0; i < 11; i++)
 				{
@@ -1030,7 +1031,7 @@ void loop()
 			{
 				state_clean();
 				if(old_date_format != date_format)
-					eeprom.write(EEPROM_DATE_FORMAT_ADDRESS, date_format);
+					;//eeprom.write(//eeprom_DATE_FORMAT_ADDRESS, date_format);
 				if(gps_enabled) state = UNLOCKED;
 				else state = ENCODING;
 				goto end;	
@@ -1068,7 +1069,7 @@ void loop()
 			{
 				state_clean();
 				while(GPS.available()) gps.encode(GPS.read());
-				maidenhead(gps, locator);
+				//maidenhead(gps, locator);
 				
 				#if SKIP_CALIBRATION
 					state = ENCODING;
@@ -1183,7 +1184,7 @@ void loop()
 						osc.plla_frequency = calibration_value <<2;
 						osc.pllb_frequency = calibration_value <<2;
 						state_clean();
-						maidenhead(gps, locator);
+						//maidenhead(gps, locator);
 						state = ENCODING;
 						goto end;
 					}
@@ -1298,7 +1299,7 @@ void loop()
 					gps.encode(GPS.read());
 				}
 				
-				maidenhead(gps, new_locator);
+				//maidenhead(gps, new_locator);
 				if(locator != new_locator)
 				{
 					locator = new_locator;
@@ -1479,7 +1480,7 @@ end:
 			{
 				case 'C': 	callsign = data;
 							for(int i = 0; i < 10; i++)
-								eeprom.write(EEPROM_CALLSIGN_BASE_ADDRESS + i, (i<data.length() ? data[i] : 0));
+								;//eeprom.write(//eeprom_CALLSIGN_BASE_ADDRESS + i, (i<data.length() ? data[i] : 0));
 							break;
 				case 'I': 	ip_address = data; break;
 				case 'H': 	hostname = data; break;
@@ -1491,7 +1492,7 @@ end:
 							}
 							for(int i = 0; i < 6; i++)
 							{
-								eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i<data.length() ? data[i] : 0));
+								;//eeprom.write(//eeprom_LOCATOR_BASE_ADDRESS + i, (i<data.length() ? data[i] : 0));
 							}
 							break;
 				case 'P': 	for (int i =0; i< 19; i++)
@@ -1499,7 +1500,7 @@ end:
 								if(dbm_strings[i] == data)
 								{
 									power = (power_t)i;
-									eeprom.write(EEPROM_POWER_ADDRESS, i);
+									//eeprom.write(//eeprom_POWER_ADDRESS, i);
 									goto actual_end;
 								}
 							}
@@ -1512,7 +1513,7 @@ end:
 								if (x==0 or x == 1)
 								{
 									tx_disable[i] = x;
-									eeprom.write(EEPROM_TX_DISABLE_BASE_ADDRESS + i, x);
+									//eeprom.write(//eeprom_TX_DISABLE_BASE_ADDRESS + i, x);
 								}
 								else panic("Invalid Disable value supplied");
 							}
@@ -1524,13 +1525,13 @@ end:
 								if (x>=0 and x <12)
 								{
 									band_array[i] = (band_t)x;
-									eeprom.write(EEPROM_BAND_BASE_ADDRESS + i, x);
+									//eeprom.write(//eeprom_BAND_BASE_ADDRESS + i, x);
 								}
 								else panic("Invalid band supplied");
 							}
 							break;
 				case 'X':	tx_percentage = atoi(data.c_str());
-							eeprom.write(EEPROM_TX_PERCENTAGE_ADDRESS, tx_percentage / 10);
+							//eeprom.write(//eeprom_TX_PERCENTAGE_ADDRESS, tx_percentage / 10);
 							break;
 				default: 	panic("Unexpected char received from Pi" + rx_string, 19);
 			};	

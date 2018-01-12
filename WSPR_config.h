@@ -9,6 +9,12 @@
 #include "src/DogLcd/DogLcd.h"
 #include "src/LC640/LC640.h"
 #include "src/maidenhead/maidenhead.h"
+#include "src/supervisor/supervisor.h"
+#if ARDUINO >= 100
+ #include "Arduino.h"
+#else
+ #include "WProgram.h"
+#endif
 
 //////////////////////////////
 //Definitions - DO NOT TOUCH//
@@ -58,7 +64,8 @@
 //Configuration stuff//
 ///////////////////////
 #define LCD_CONTRAST 35 //0-63
-
+#define GPS_TIMEOUT 5000 //Time with no GPS activity before we assume GPS lock has been lost in ms
+#define PI_TIMEOUT 5000 //Pi Timeout in ms
 
 
 
