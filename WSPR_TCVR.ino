@@ -56,6 +56,7 @@ String watt_strings[] = {"1mW", "2mW", "5mW", "10mW", "20mW", "50mW", "100mW", "
 enum band_t{BAND_2200, BAND_630, BAND_160, BAND_80, BAND_60, BAND_40, BAND_30, BAND_20, BAND_17, BAND_15, BAND_12, BAND_10, BAND_HOP};
 String band_strings[] = {"2200m", "630m", "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"}; 
 double band_freq[] = {136000.0, 474200.0, 1836600.0, 3592600.0, 5287200.0, 7038600.0, 10138700.0, 14095600.0, 18104600.0, 21094600.0, 24924600.0, 28124600.0};
+int bpf[] = {4,4,4,0,1,1,2,2,3,3,3,3};
 
 //Date related stuff
 enum date_t {BRITISH, AMERICAN, GLOBAL};								
@@ -94,6 +95,14 @@ void setup()
 	pinMode(LED, OUTPUT);
 	pinMode(PI_WATCHDOG, INPUT);
 	digitalWrite(LED, LOW);
+	pinMode(BAND0, OUTPUT);
+	digitalWrite(BAND0, LOW);
+	pinMode(BAND1, OUTPUT);
+	digitalWrite(BAND1, LOW);
+	pinMode(BAND2, OUTPUT);
+	digitalWrite(BAND2, LOW);
+	pinMode(TX, OUTPUT);
+	digitalWrite(TX, LOW);
 
 	osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
 	
@@ -102,6 +111,13 @@ void setup()
 	locator.reserve(7);
 	old_locator.reserve(7);
 
+}
+
+void band_set(uint8_t data)
+{
+  digitalWrite(BAND0, data & 1);
+  digitalWrite(BAND1, data & 2);
+  digitalWrite(BAND2, data & 4);
 }
 
 void lcd_write(int row, int col, String data)
@@ -1203,6 +1219,7 @@ void loop()
 				lcd_write(1,0, band_strings[band]);
 				tx_frequency = band_freq[band] + 1400 + random(20,180);
 				old_band = band;
+				band_set(bpf[band]);
 				RPI.print("SRX - " + band_strings[band] +";\n");
 				lcd_write(1,14, "RX");
 				
@@ -1300,6 +1317,7 @@ void loop()
 					band = band_array[gps.time.hour()];
 					if(band != old_band)
 					{
+							band_set(bpf[band]);
 							lcd_write(1,11, (tx_disable[band]) ? "\1\2" : "  "); // \1 and \2 are t and x with a score through them as stored in the lcd memory to indicated tx disabled for this band
 							
 							lcd_write(1,0, band_strings[band]);
