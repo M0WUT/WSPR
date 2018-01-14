@@ -7,24 +7,30 @@ class supervisor
 	public:
 		supervisor();
 		
-		enum data_t {CALLSIGN, LOCATOR, POWER, TX_DISABLE, BAND_ARRAY, DATE_FORMAT, TX_PERCENTAGE, STATUS};
+		enum data_t {CALLSIGN, LOCATOR, POWER, TX_DISABLE, BAND_ARRAY, DATE_FORMAT, TX_PERCENTAGE, STATUS, HOUR, MINUTE, TIME_STRING, BAND};
 		struct settings_t
 		{
 			String callsign;
 			String locator;
 			String ip;
 			String hostname;
-			int power;
-			int bandArray[24];
-			int txDisable[12];
+			int band;
+			struct time_t
+			{
+				int hour;
+				int minute;
+				int second;
+			} time;
 			int txPercentage;
-			int dateFormat;
+			bool txDisable;
 			String date;
 			bool gpsEnabled;
 			bool gpsActive;
 			bool piActive;
 			String statusString;
 		};
+		
+		
 		
 		//Function used to return settings to make them effectively read only, except via sync function
 		struct settings_t settings();
@@ -53,8 +59,8 @@ class supervisor
 		bool timeRequested;
 		struct settings_t setting;
 		String linuxTimeString;
-		
-		
-		
+		int bandArray[24];
+		int txDisable[12];
+		int filter[12];		
 };
 #endif

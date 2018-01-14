@@ -104,6 +104,7 @@ void setup()
 	pinMode(TX, OUTPUT);
 	digitalWrite(TX, LOW);
 
+
 	osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
 	
 	callsign.reserve(11);
