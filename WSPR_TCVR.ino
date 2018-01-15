@@ -104,7 +104,7 @@ void setup()
 	pinMode(TX, OUTPUT);
 	digitalWrite(TX, LOW);
 
-	osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
+	//osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
 	
 	callsign.reserve(11);
 	old_callsign.reserve(11);
@@ -1444,6 +1444,7 @@ end:
 							RPI.print(";\n");
 							break;
 							
+				case 'G': 	break; //Not implemented as intending to oerwrite with supervisor branch
 				case 'X':  	RPI.print("X");
 							RPI.print(tx_percentage);
 							RPI.print(";\n");
