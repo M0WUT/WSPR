@@ -2,6 +2,8 @@
 
 static DogLcd *lcd = NULL;
 
+void panic(int message){}
+
 void register_lcd_for_panic(DogLcd *new_lcd)
 {
 	lcd = new_lcd;

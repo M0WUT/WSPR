@@ -7,7 +7,7 @@ class supervisor
 	public:
 		supervisor();
 		
-		enum data_t {CALLSIGN, LOCATOR, POWER, TX_DISABLE, BAND_ARRAY, DATE_FORMAT, TX_PERCENTAGE, STATUS, HOUR, MINUTE, TIME_STRING, BAND};
+		enum data_t {CALLSIGN, LOCATOR, POWER, TX_DISABLE, BAND_ARRAY, DATE_FORMAT, TX_PERCENTAGE, STATUS, HOUR, MINUTE, UNIX_TIME, TIME, BAND, IP, HOSTNAME};
 		struct settings_t
 		{
 			String callsign;
@@ -40,9 +40,12 @@ class supervisor
 		int sync(int data, data_t type);
 		int sync(int data[], data_t type);
 		
+		//Used to indicate to main program that something has changed
+		bool updated(supervisor::data_t type);
+		
 		//Functions to ingest data
 		int eeprom_load();
-		void uart_handler(String data);
+		void uart_handler();
 		void gps_handler(TinyGPSPlus gps);
 		
 		//Deals with any data requests / new data input
@@ -62,5 +65,6 @@ class supervisor
 		int bandArray[24];
 		int txDisable[12];
 		int filter[12];		
+		uint32_t updatedFlags = 0; //Used as a 32 bit array of updated bits, indexed by data_t
 };
 #endif
