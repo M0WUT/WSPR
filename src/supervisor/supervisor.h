@@ -5,6 +5,7 @@
 class supervisor
 {
 	public:
+		//Constructor loads data from EEPROM (if available) or loads default values
 		supervisor();
 		
 		enum data_t {CALLSIGN, LOCATOR, POWER, TX_DISABLE, BAND_ARRAY, DATE_FORMAT, TX_PERCENTAGE, STATUS, HOUR, MINUTE, UNIX_TIME, TIME, BAND, IP, HOSTNAME};
@@ -15,36 +16,41 @@ class supervisor
 			String ip;
 			String hostname;
 			int band;
+			int power;
 			struct time_t
 			{
+				int day;
+				int month;
+				int year;
 				int hour;
 				int minute;
 				int second;
 			} time;
+
 			int txPercentage;
 			bool txDisable;
 			String date;
 			bool gpsEnabled;
 			bool gpsActive;
 			bool piActive;
+			bool upgradeFlag;
 			String statusString;
 		};
 		
-		
-		
+	
 		//Function used to return settings to make them effectively read only, except via sync function
 		struct settings_t settings();
 		
 		//Synchronisation functions
 		int sync(String data, data_t type);
+		int sync(struct supervisor::settings_t::time_t time, data_t type);
 		int sync(int data, data_t type);
-		int sync(int data[], data_t type);
+		int sync(int *data, data_t type);
 		
 		//Used to indicate to main program that something has changed
 		bool updated(supervisor::data_t type);
 		
 		//Functions to ingest data
-		int eeprom_load();
 		void uart_handler();
 		void gps_handler(TinyGPSPlus gps);
 		

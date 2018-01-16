@@ -3,8 +3,8 @@
 int supervisor::sync(String data, supervisor::data_t type){}
 int supervisor::sync(int data, supervisor::data_t type){}
 int supervisor::sync(int *data, supervisor::data_t type){}
+int supervisor::sync(supervisor::settings_t::time_t, data_t type){}
 supervisor::supervisor() : eeprom(EEPROM_CS){}
-int supervisor::eeprom_load(){}
 bool supervisor::updated(supervisor::data_t type){return (this->updatedFlags >> type) & 0x01;}
 
 struct supervisor::settings_t supervisor::settings() {return this->setting;}
@@ -30,32 +30,21 @@ void supervisor::background_tasks()
 		this->locatorRequested = 0;
 	}
 	
+	this->sync(txDisable[this->setting.time.hour], TX_DISABLE);
+	this->sync(this->bandArray[this->setting.time.hour], BAND);
+	
 	digitalWrite(BAND0, this->filter[this->setting.band] & 1);
 	digitalWrite(BAND1, this->filter[this->setting.band] & 2);
 	digitalWrite(BAND2, this->filter[this->setting.band] & 4);	
 }
 
 
+
+
 void supervisor::gps_handler(TinyGPSPlus gps)
 {
-	this->sync(gps.time.hour(), HOUR);
-	this->sync(gps.time.hour(), MINUTE);
-	this->sync(	"T" +
-				String(gps.date.day()) +
-				"/" +
-				String(gps.date.month()) +
-				"/" +
-				String(gps.date.year()) +
-				" " +
-				String(gps.time.hour()) +
-				":" +
-				String(gps.time.minute()) +
-				":" +
-				String(gps.time.second()) +
-				";\n", UNIX_TIME);
-	this->sync(this->bandArray[this->setting.time.hour], BAND);
+	this->sync(supervisor::settings_t::time_t{gps.date.day(), gps.date.month(), gps.date.year(), gps.time.hour(), gps.time.minute(), gps.time.second()}, TIME);
 	this->sync(maidenhead(gps), LOCATOR);
-	this->sync(txDisable[this->setting.time.hour], TX_DISABLE);
 }
 
 void supervisor::uart_handler()
@@ -92,7 +81,40 @@ void supervisor::uart_handler()
 	{
 		switch(rxString[0]) //switch on control character
 		{
+			case 'I':	this->sync(data, IP); break; //this indicates not connected to network
 			case 'C':	RPI.print("C" + this->setting.callsign + ";\n"); break;
+			case 'L':	RPI.print("L" + (this->setting.gpsEnabled ? "GPS" : this->setting.locator) + ";\n"); break;
+			case 'P':	RPI.print("P" + String(this->setting.power) + ";\n"); break;
+			case 'B':	RPI.print("B");
+						for (int i=0; i<23; i++)
+						{
+							RPI.print(this->bandArray[i]);
+							RPI.print(",");
+						}
+						RPI.print(this->bandArray[23]);
+						RPI.print(";\n");
+						break;
+			case 'X':	RPI.print("X" + String(this->setting.txPercentage) + ";\n"); break;
+			case 'S':	RPI.print("S" + this->setting.statusString + ";\n"); break;
+			case 'T':	this->timeRequested = 1; break;
+			case 'V':	RPI.print("V" + String(VERSION) + ";\n"); break;
+			case 'U':	//Deliberate fallthough as procedure is same for software and firmware updated
+			case 'F':	this->setting.upgradeFlag = 1; break;
+			case 'D':	RPI.print("D");
+						for (int i=0; i<11; i++)
+						{
+							RPI.print(this->txDisable[i]);
+							RPI.print(",");
+						}
+						RPI.print(this->txDisable[11]);
+						RPI.print(";\n");
+						break;
+			case 'G':	this->locatorRequested = 1; break;
+						
+						
+			case 'A': //These should never be sent to the PIC
+			case 'H': //put in as acknowledgement I haven't forgotten to deal with them
+			default: 	panic(rxString[0] + data, PI_UNKNOWN_CHARACTER); break;
 			
 			
 		};
@@ -112,19 +134,19 @@ void supervisor::uart_handler()
 						this->sync(temp, BAND_ARRAY);
 						break;
 			case 'X': 	this->sync(atoi(data.c_str()), TX_PERCENTAGE); break; //Convert String to int
-			case 'T':	this->timeRequested = 1; break;
 			case 'D':	int dTemp[12];
 						for(int i = 0; i<12; i++)
-							dTemp[i] = data[i*2] - '0';
-							
+							dTemp[i] = data[i*2] - '0';	
 						this->sync(dTemp, TX_DISABLE);
 						break;
 			case 'S': 	//These all fallthrough deliberately
 			case 'V':	//These should not be sent with extra data
 			case 'U': 	//They are put here as acknowledgement that
 			case 'F':	//I haven't forgotten to deal with them
-			case 'A':	
-			default:	panic(rxString[0] + data, PI_UNKNOWN_CHARACTER);
+			case 'A':
+			case 'G':
+			case 'T':
+			default:	panic(rxString[0] + data, PI_UNKNOWN_CHARACTER); break;
 		};
 		
 	}
