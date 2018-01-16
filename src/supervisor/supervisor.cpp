@@ -3,8 +3,20 @@
 int supervisor::sync(String data, supervisor::data_t type){}
 int supervisor::sync(int data, supervisor::data_t type){}
 int supervisor::sync(int *data, supervisor::data_t type){}
-int supervisor::sync(supervisor::settings_t::time_t, data_t type){}
-supervisor::supervisor() : eeprom(EEPROM_CS){}
+
+
+
+supervisor::supervisor() : eeprom(EEPROM_CS)
+{
+	pinMode(BAND0, OUTPUT);
+	digitalWrite(BAND0, LOW);
+	pinMode(BAND1, OUTPUT);
+	digitalWrite(BAND1, LOW);
+	pinMode(BAND2, OUTPUT);
+	digitalWrite(BAND2, LOW);
+	
+}
+
 bool supervisor::updated(supervisor::data_t type){return (this->updatedFlags >> type) & 0x01;}
 
 struct supervisor::settings_t supervisor::settings() {return this->setting;}
@@ -38,34 +50,31 @@ void supervisor::background_tasks()
 	digitalWrite(BAND2, this->filter[this->setting.band] & 4);	
 }
 
-
-
-
-void supervisor::gps_handler(TinyGPSPlus gps)
+void supervisor::gps_handler(TinyGPSPlus *gps)
 {
-	this->sync(supervisor::settings_t::time_t{gps.date.day(), gps.date.month(), gps.date.year(), gps.time.hour(), gps.time.minute(), gps.time.second()}, TIME);
+	this->sync(supervisor::settings_t::time_t{gps->date.day(), gps->date.month(), gps->date.year(), gps->time.hour(), gps->time.minute(), gps->time.second()}, TIME);
 	this->sync(maidenhead(gps), LOCATOR);
 }
 
-void supervisor::uart_handler()
+void supervisor::uart_handler(HardwareSerial *uart)
 {
 	//Temporary string to store data in
 	String rxString;
 	rxString.reserve(50);
 	
 	//Read all available data until newline found or timeout
-	char x = RPI.read();
+	char x = uart->read();
 		while(x != '\n')
 		{
 			rxString += x;
 			int start_time = millis();
-			//Need timeout as PIC is much faster than Pi so some tranmissions weren't done before RPI.available() == 0
-			while(!RPI.available())
+			//Need timeout as PIC is much faster than Pi so some tranmissions weren't done before uart->available() == 0
+			while(!uart->available())
 				if((millis() - start_time > 2000) || rxString.length() > 50) 
 				{
 					panic(PI_INCOMPLETE_TRANSMISSON);
 				}
-			x = RPI.read();	
+			x = uart->read();	
 		}
 	
 
@@ -82,32 +91,32 @@ void supervisor::uart_handler()
 		switch(rxString[0]) //switch on control character
 		{
 			case 'I':	this->sync(data, IP); break; //this indicates not connected to network
-			case 'C':	RPI.print("C" + this->setting.callsign + ";\n"); break;
-			case 'L':	RPI.print("L" + (this->setting.gpsEnabled ? "GPS" : this->setting.locator) + ";\n"); break;
-			case 'P':	RPI.print("P" + String(this->setting.power) + ";\n"); break;
-			case 'B':	RPI.print("B");
+			case 'C':	uart->print("C" + this->setting.callsign + ";\n"); break;
+			case 'L':	uart->print("L" + (this->setting.gpsEnabled ? "GPS" : this->setting.locator) + ";\n"); break;
+			case 'P':	uart->print("P" + String(this->setting.power) + ";\n"); break;
+			case 'B':	uart->print("B");
 						for (int i=0; i<23; i++)
 						{
-							RPI.print(this->bandArray[i]);
-							RPI.print(",");
+							uart->print(this->bandArray[i]);
+							uart->print(",");
 						}
-						RPI.print(this->bandArray[23]);
-						RPI.print(";\n");
+						uart->print(this->bandArray[23]);
+						uart->print(";\n");
 						break;
-			case 'X':	RPI.print("X" + String(this->setting.txPercentage) + ";\n"); break;
-			case 'S':	RPI.print("S" + this->setting.statusString + ";\n"); break;
+			case 'X':	uart->print("X" + String(this->setting.txPercentage) + ";\n"); break;
+			case 'S':	uart->print("S" + this->setting.statusString + ";\n"); break;
 			case 'T':	this->timeRequested = 1; break;
-			case 'V':	RPI.print("V" + String(VERSION) + ";\n"); break;
+			case 'V':	uart->print("V" + String(VERSION) + ";\n"); break;
 			case 'U':	//Deliberate fallthough as procedure is same for software and firmware updated
 			case 'F':	this->setting.upgradeFlag = 1; break;
-			case 'D':	RPI.print("D");
+			case 'D':	uart->print("D");
 						for (int i=0; i<11; i++)
 						{
-							RPI.print(this->txDisable[i]);
-							RPI.print(",");
+							uart->print(this->txDisable[i]);
+							uart->print(",");
 						}
-						RPI.print(this->txDisable[11]);
-						RPI.print(";\n");
+						uart->print(this->txDisable[11]);
+						uart->print(";\n");
 						break;
 			case 'G':	this->locatorRequested = 1; break;
 						
@@ -147,15 +156,29 @@ void supervisor::uart_handler()
 			case 'G':
 			case 'T':
 			default:	panic(rxString[0] + data, PI_UNKNOWN_CHARACTER); break;
-		};
-		
+		};		
 	}
+}
+
+int supervisor::sync(supervisor::settings_t::time_t newTime, data_t type)
+{
+	if(type != TIME) panic(TIME_SYNC_FAILED);
+	if(	this->setting.time.day 		!= newTime.day ||
+		this->setting.time.month 	!= newTime.month ||
+		this->setting.time.year 	!= newTime.year ||
+		this->setting.time.hour 	!= newTime.hour ||
+		this->setting.time.minute 	!= newTime.minute ||
+		this->setting.time.second 	!= newTime.second)
+	{
+		this->updatedFlags |= 1<<TIME;
+	}		
+	this->setting.time = newTime;
 	
-	
-	
-	
-	
-	
-	
-	
+	this->linuxTimeString = "T" + String(this->setting.time.day) +
+							"/" + String(this->setting.time.month) +
+							"/" + String(this->setting.time.year) +
+							" " + String(this->setting.time.hour) +
+							":" + String(this->setting.time.minute) +
+							":" + String(this->setting.time.second) +
+							";\n";
 }

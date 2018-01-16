@@ -86,22 +86,17 @@ void setup()
 	lcd.begin(DOG_LCD_M163, LCD_CONTRAST, DOG_LCD_VCC_5V);
 	lcd.noCursor();
 	register_lcd_for_panic(&lcd);
-	GPS.begin(9600);
+	
 	RPI.begin(115200);
 	PC.begin(9600); //Used for debugging and stuff
-	
+	GPS.begin(9600);
 	pinMode(GPS_PPS, INPUT);
 	pinMode(MENU_BTN, INPUT);
 	pinMode(EDIT_BTN, INPUT);
 	pinMode(LED, OUTPUT);
 	pinMode(PI_WATCHDOG, INPUT);
 	digitalWrite(LED, LOW);
-	pinMode(BAND0, OUTPUT);
-	digitalWrite(BAND0, LOW);
-	pinMode(BAND1, OUTPUT);
-	digitalWrite(BAND1, LOW);
-	pinMode(BAND2, OUTPUT);
-	digitalWrite(BAND2, LOW);
+	
 	pinMode(TX, OUTPUT);
 	digitalWrite(TX, LOW);
 
@@ -230,7 +225,8 @@ uint32_t tx (uint32_t currentTime)
 
 void loop()
 {
-	master.gps_handler(gps);
+	master.gps_handler(&gps);
+	master.uart_handler(&RPI);
 	master.background_tasks();
 	if(calibration_flag && state != CALIBRATING) //GPS calibration has been updated 
 	{
@@ -1203,8 +1199,8 @@ void loop()
 			
 		case HOME:
 		{
-
-			break;	
+		
+			break;
 		}//end of HOME
 		end:;
 	} //end of state machine

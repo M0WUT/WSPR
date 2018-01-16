@@ -43,7 +43,7 @@ class supervisor
 		
 		//Synchronisation functions
 		int sync(String data, data_t type);
-		int sync(struct supervisor::settings_t::time_t time, data_t type);
+		int sync(struct supervisor::settings_t::time_t newTime, data_t type);
 		int sync(int data, data_t type);
 		int sync(int *data, data_t type);
 		
@@ -51,8 +51,8 @@ class supervisor
 		bool updated(supervisor::data_t type);
 		
 		//Functions to ingest data
-		void uart_handler();
-		void gps_handler(TinyGPSPlus gps);
+		void uart_handler(HardwareSerial *uart);
+		void gps_handler(TinyGPSPlus *gps);
 		
 		//Deals with any data requests / new data input
 		void background_tasks();
