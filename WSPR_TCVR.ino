@@ -841,8 +841,7 @@ void loop()
 			if(!state_initialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
 				valid_ip = 0;
-				ip_address = "0.0.0.0";
-				hostname = "deadbeef";
+				
 				RPI.print("I;\n");
 				RPI.print("H;\n");
 				//Ensure that this screen always shows live data by clearing IP and hostname and re-requesting them
@@ -1462,7 +1461,10 @@ end:
 								detachCoreTimerService(tx); //stop transmitting
 								osc.disable_clock(0);
 							}
-							RPI.print(rx_string[0]+";\n"); //Acknowledge we are ready to be reset
+							
+							
+							RPI.println(String(rx_string[0])+";\n"); //Acknowledge we are ready to be reset
+
 							lcd_write(0,0, blank_line);
 							lcd_write(1,0, blank_line);
 							lcd_write(2,0, blank_line);
