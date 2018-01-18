@@ -17,6 +17,9 @@
 #define PI_INCOMPLETE_TRANSMISSON 7 //DEBUG
 #define PI_UNKNOWN_CHARACTER 7 //DEBUG
 #define TIME_SYNC_FAILED 7 //DEBUG
+#define INVALID_SYNC_PARAMETERS 7 //DEBUG
+#define PI_UART_NOT_REGISTERED 7 //DEBUG
+#define GPS_UART_NOT_REGISTERED 7 //DEBUG
 
 void panic(String message, uint8_t error_code);
 void panic(String message);

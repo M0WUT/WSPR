@@ -8,7 +8,7 @@ class supervisor
 		//Constructor loads data from EEPROM (if available) or loads default values
 		supervisor();
 		
-		enum data_t {CALLSIGN, LOCATOR, POWER, TX_DISABLE, BAND_ARRAY, DATE_FORMAT, TX_PERCENTAGE, STATUS, HOUR, MINUTE, UNIX_TIME, TIME, BAND, IP, HOSTNAME};
+		enum data_t {CALLSIGN, LOCATOR, POWER, TX_DISABLE, DATE_FORMAT, TX_PERCENTAGE, STATUS, TIME, DATE, BAND, IP, HOSTNAME};
 		struct settings_t
 		{
 			String callsign;
@@ -29,12 +29,13 @@ class supervisor
 
 			int txPercentage;
 			bool txDisable;
-			String date;
+			String dateString;
+			String timeString;
 			bool gpsEnabled;
 			bool gpsActive;
 			bool piActive;
-			bool upgradeFlag;
-			String statusString;
+			char upgradeChar;
+			String status;
 		};
 		
 	
@@ -42,25 +43,31 @@ class supervisor
 		struct settings_t settings();
 		
 		//Synchronisation functions
-		int sync(String data, data_t type);
-		int sync(struct supervisor::settings_t::time_t newTime, data_t type);
-		int sync(int data, data_t type);
-		int sync(int *data, data_t type);
+		int sync(String data, data_t type, const bool updatePi = 1);
+		int sync(struct supervisor::settings_t::time_t newTime, data_t type, const bool updatePi = 1);
+		int sync(int data, data_t type, const bool updatePi = 1);
+		int sync(int *data, data_t type, const bool updatePi = 1);
 		
 		//Used to indicate to main program that something has changed
 		bool updated(supervisor::data_t type);
 		
 		//Functions to ingest data
-		void uart_handler(HardwareSerial *uart);
-		void gps_handler(TinyGPSPlus *gps);
+		void pi_handler();
+		void gps_handler();
 		
 		//Deals with any data requests / new data input
 		void background_tasks();
 		
+		//Allows for registering of UART buses
+		void pi_uart_register(HardwareSerial *uart);
+		void gps_uart_register(HardwareSerial *gps);
+		
 		//Time last synched to bits of hardware;
 		volatile uint32_t piSyncTime;
 		volatile uint32_t gpsSyncTime;
-		bool heartbeat;
+		volatile bool heartbeat;
+		
+	
 		
 	private:
 		LC640 eeprom;
@@ -69,8 +76,22 @@ class supervisor
 		struct settings_t setting;
 		String linuxTimeString;
 		int bandArray[24];
-		int txDisable[12];
+		int txDisableArray[12];
 		int filter[12];		
 		uint32_t updatedFlags = 0; //Used as a 32 bit array of updated bits, indexed by data_t
+		TinyGPSPlus gps;
+		HardwareSerial *piUart = NULL;
+		HardwareSerial *gpsUart = NULL;
+		enum date_t {BRITISH, AMERICAN, GLOBAL} dateFormat;	
+		
+		//EEPROM addresses
+		static const int EEPROM_CALLSIGN_BASE_ADDRESS = 0;
+		static const int EEPROM_LOCATOR_BASE_ADDRESS = 10;
+		static const int EEPROM_POWER_ADDRESS = 16;
+		static const int EEPROM_TX_PERCENTAGE_ADDRESS = 17;
+		static const int EEPROM_DATE_FORMAT_ADDRESS = 18;
+		static const int EEPROM_BAND_BASE_ADDRESS = 19;
+		static const int EEPROM_TX_DISABLE_BASE_ADDRESS = 44;
+		static const int EEPROM_CHECKSUM_BASE_ADDRESS = 56;
 };
 #endif

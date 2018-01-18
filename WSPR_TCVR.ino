@@ -225,8 +225,7 @@ uint32_t tx (uint32_t currentTime)
 
 void loop()
 {
-	master.gps_handler(&gps);
-	master.uart_handler(&RPI);
+
 	master.background_tasks();
 	if(calibration_flag && state != CALIBRATING) //GPS calibration has been updated 
 	{

@@ -1,13 +1,9 @@
 #include "supervisor.h"
 
-int supervisor::sync(String data, supervisor::data_t type){}
-int supervisor::sync(int data, supervisor::data_t type){}
-int supervisor::sync(int *data, supervisor::data_t type){}
-
-
-
 supervisor::supervisor() : eeprom(EEPROM_CS)
 {
+	
+	//Setup Band Control pins
 	pinMode(BAND0, OUTPUT);
 	digitalWrite(BAND0, LOW);
 	pinMode(BAND1, OUTPUT);
@@ -15,170 +11,382 @@ supervisor::supervisor() : eeprom(EEPROM_CS)
 	pinMode(BAND2, OUTPUT);
 	digitalWrite(BAND2, LOW);
 	
+	//Attempt to load data from EEPROM, if no valid data, load defaults and save to EEPROM
+	
+	if( eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS) == 'L' && 
+		eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS+1) == 'I' && 
+		eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS+2) == 'D')
+	{
+		
+		//Load everything from eeprom
+		
+		//Load callsign
+				
+		//Load locator
+		
+		//Load power
+		
+		//Load tx percentage
+		
+		//Load date format
+		
+		//Load txDisable Array
+		
+		//Load Band Array
+		
+	}
 }
 
-bool supervisor::updated(supervisor::data_t type){return (this->updatedFlags >> type) & 0x01;}
+bool supervisor::updated(supervisor::data_t type){return (updatedFlags >> type) & 0x01;}
 
-struct supervisor::settings_t supervisor::settings() {return this->setting;}
+struct supervisor::settings_t supervisor::settings() {return setting;}
 
 void supervisor::background_tasks()
 {
-	this->setting.gpsActive = this->setting.gpsEnabled && (millis() - this->gpsSyncTime < GPS_TIMEOUT);
-	this->setting.piActive = (millis() - this->piSyncTime < PI_TIMEOUT);
+	setting.gpsActive = setting.gpsEnabled && (millis() - gpsSyncTime < GPS_TIMEOUT);
+	setting.piActive = (millis() - piSyncTime < PI_TIMEOUT);
 	
-	if(this->heartbeat)
-		RPI.print("A;\n"); //If PI has toggled GPIO to indicate activity acknowledge
-		this->heartbeat = 0;
+	if(heartbeat)
+		piUart->print("A;\n"); //If PI has toggled GPIO to indicate activity acknowledge
+		heartbeat = 0;
 	
-	if(this->timeRequested && this->setting.gpsActive) //Only responds to time requests if we have valid GPS data
+	if(timeRequested && setting.gpsActive) //Only responds to time requests if we have valid GPS data
 	{
-		RPI.print(this->linuxTimeString);
-		this->timeRequested = 0;
+		piUart->print(linuxTimeString);
+		timeRequested = 0;
 	}
 	
-	if(this->locatorRequested && this->setting.gpsActive)
+	if(locatorRequested && setting.gpsActive)
 	{
-		RPI.print("G" + this->setting.locator + ";\n");
-		this->locatorRequested = 0;
+		piUart->print("G" + setting.locator + ";\n");
+		locatorRequested = 0;
 	}
 	
-	this->sync(txDisable[this->setting.time.hour], TX_DISABLE);
-	this->sync(this->bandArray[this->setting.time.hour], BAND);
+	if(bandArray[setting.time.hour] != setting.band)
+	{
+		setting.band = bandArray[setting.time.hour];
+		updatedFlags |= (1<<BAND);
+	}
 	
-	digitalWrite(BAND0, this->filter[this->setting.band] & 1);
-	digitalWrite(BAND1, this->filter[this->setting.band] & 2);
-	digitalWrite(BAND2, this->filter[this->setting.band] & 4);	
+	if(txDisableArray[setting.band] != setting.txDisable)
+	{
+		setting.txDisable = txDisableArray[setting.band];
+		updatedFlags |= (1<<TX_DISABLE);
+	}
+
+	digitalWrite(BAND0, filter[setting.band] & 1);
+	digitalWrite(BAND1, filter[setting.band] & 2);
+	digitalWrite(BAND2, filter[setting.band] & 4);	
 }
 
-void supervisor::gps_handler(TinyGPSPlus *gps)
+void supervisor::gps_handler()
 {
-	this->sync(supervisor::settings_t::time_t{gps->date.day(), gps->date.month(), gps->date.year(), gps->time.hour(), gps->time.minute(), gps->time.second()}, TIME);
-	this->sync(maidenhead(gps), LOCATOR);
-}
-
-void supervisor::uart_handler(HardwareSerial *uart)
-{
-	//Temporary string to store data in
-	String rxString;
-	rxString.reserve(50);
-	
-	//Read all available data until newline found or timeout
-	char x = uart->read();
-		while(x != '\n')
+	if (gpsUart == NULL) panic(GPS_UART_NOT_REGISTERED);
+	if(setting.gpsEnabled)
+	{
+		if(gpsUart->available()) //Has to be nested as this if can't be evaluated if a gps object hasn't been initialised
 		{
-			rxString += x;
-			int start_time = millis();
-			//Need timeout as PIC is much faster than Pi so some tranmissions weren't done before uart->available() == 0
-			while(!uart->available())
-				if((millis() - start_time > 2000) || rxString.length() > 50) 
-				{
-					panic(PI_INCOMPLETE_TRANSMISSON);
-				}
-			x = uart->read();	
+			while(gpsUart->available())
+				gps.encode(gpsUart->read());
+			sync(supervisor::settings_t::time_t{gps.date.day(), gps.date.month(), gps.date.year(), gps.time.hour(), gps.time.minute(), gps.time.second()}, TIME);
+			sync(maidenhead(&gps), LOCATOR);
 		}
-	
-
-	
-	if(rxString.substring(rxString.length()-1) != ";") panic(INCORRECT_UART_TERMINATION);
-	
-	String data = rxString.substring(1, rxString.length() - 1); //Trim control characters
-	
-	//Note that very little sanity checking is done on the data
-	//If implementing in your own system, might be worth adding
-	
-	if(data == "") //no packet means Pi is requesting info
-	{
-		switch(rxString[0]) //switch on control character
-		{
-			case 'I':	this->sync(data, IP); break; //this indicates not connected to network
-			case 'C':	uart->print("C" + this->setting.callsign + ";\n"); break;
-			case 'L':	uart->print("L" + (this->setting.gpsEnabled ? "GPS" : this->setting.locator) + ";\n"); break;
-			case 'P':	uart->print("P" + String(this->setting.power) + ";\n"); break;
-			case 'B':	uart->print("B");
-						for (int i=0; i<23; i++)
-						{
-							uart->print(this->bandArray[i]);
-							uart->print(",");
-						}
-						uart->print(this->bandArray[23]);
-						uart->print(";\n");
-						break;
-			case 'X':	uart->print("X" + String(this->setting.txPercentage) + ";\n"); break;
-			case 'S':	uart->print("S" + this->setting.statusString + ";\n"); break;
-			case 'T':	this->timeRequested = 1; break;
-			case 'V':	uart->print("V" + String(VERSION) + ";\n"); break;
-			case 'U':	//Deliberate fallthough as procedure is same for software and firmware updated
-			case 'F':	this->setting.upgradeFlag = 1; break;
-			case 'D':	uart->print("D");
-						for (int i=0; i<11; i++)
-						{
-							uart->print(this->txDisable[i]);
-							uart->print(",");
-						}
-						uart->print(this->txDisable[11]);
-						uart->print(";\n");
-						break;
-			case 'G':	this->locatorRequested = 1; break;
-						
-						
-			case 'A': //These should never be sent to the PIC
-			case 'H': //put in as acknowledgement I haven't forgotten to deal with them
-			default: 	panic(rxString[0] + data, PI_UNKNOWN_CHARACTER); break;
-			
-			
-		};
-	}
-	else //we are setting data
-	{
-		switch(rxString[0]) //switch on control character
-		{
-			case 'I':	this->sync(data, IP); break;
-			case 'H':	this->sync(data, HOSTNAME); break;
-			case 'C':	this->sync(data, CALLSIGN); break;
-			case 'L': 	this->sync(data, LOCATOR); break;
-			case 'P':	this->sync(atoi(data.c_str()), POWER); break; //Convert String to int
-			case 'B':	int temp[24];
-						for(int i = 0; i<24; i++)
-							temp[i] = data[i*2] - '0';
-						this->sync(temp, BAND_ARRAY);
-						break;
-			case 'X': 	this->sync(atoi(data.c_str()), TX_PERCENTAGE); break; //Convert String to int
-			case 'D':	int dTemp[12];
-						for(int i = 0; i<12; i++)
-							dTemp[i] = data[i*2] - '0';	
-						this->sync(dTemp, TX_DISABLE);
-						break;
-			case 'S': 	//These all fallthrough deliberately
-			case 'V':	//These should not be sent with extra data
-			case 'U': 	//They are put here as acknowledgement that
-			case 'F':	//I haven't forgotten to deal with them
-			case 'A':
-			case 'G':
-			case 'T':
-			default:	panic(rxString[0] + data, PI_UNKNOWN_CHARACTER); break;
-		};		
 	}
 }
 
-int supervisor::sync(supervisor::settings_t::time_t newTime, data_t type)
+void supervisor::pi_handler()
+{
+	if (piUart == NULL) panic(PI_UART_NOT_REGISTERED);
+	if(piUart->available())
+	{
+		//Temporary string to store data in
+		String rxString;
+		rxString.reserve(50);
+		
+		//Read all available data until newline found or timeout
+		char x = piUart->read();
+			while(x != '\n')
+			{
+				rxString += x;
+				int start_time = millis();
+				//Need timeout as PIC is much faster than Pi so some tranmissions weren't done before uart->available() == 0
+				while(!piUart->available())
+				{
+					if((millis() - start_time > 2000) || rxString.length() > 50) 
+					{
+						panic(PI_INCOMPLETE_TRANSMISSON);
+					}
+				}
+				x = piUart->read();	
+			}
+		
+
+		
+		if(rxString.substring(rxString.length()-1) != ";") panic(INCORRECT_UART_TERMINATION);
+		
+		String data = rxString.substring(1, rxString.length() - 1); //Trim control characters
+		
+		//Note that very little sanity checking is done on the data
+		//If implementing in your own system, might be worth adding
+		
+		if(data == "") //no packet means Pi is requesting info
+		{
+			switch(rxString[0]) //switch on control character
+			{
+				case 'I':	sync(data, IP, 0); break; //actually setting data, for when pi not connected to network so has no IP address
+				case 'H':   sync(data, HOSTNAME, 0); break; //as above with hostname
+				case 'C':	piUart->print("C" + setting.callsign + ";\n"); break;
+				case 'L':	piUart->print("L" + (setting.gpsEnabled ? "GPS" : setting.locator) + ";\n"); break;
+				case 'P':	piUart->print("P" + String(setting.power) + ";\n"); break;
+				case 'B':	piUart->print("B");
+							for (int i=0; i<23; i++)
+							{
+								piUart->print(bandArray[i]);
+								piUart->print(",");
+							}
+							piUart->print(bandArray[23]);
+							piUart->print(";\n");
+							break;
+				case 'X':	piUart->print("X" + String(setting.txPercentage) + ";\n"); break;
+				case 'S':	piUart->print("S" + setting.status + ";\n"); break;
+				case 'T':	timeRequested = 1; break;
+				case 'V':	piUart->print("V" + String(VERSION) + ";\n"); break;
+				case 'U':	//Deliberate fallthough as procedure is same for software and firmware updated
+				case 'F':	setting.upgradeChar = rxString[0]; break;
+				case 'D':	piUart->print("D");
+							for (int i=0; i<11; i++)
+							{
+								piUart->print(txDisableArray[i]);
+								piUart->print(",");
+							}
+							piUart->print(txDisableArray[11]);
+							piUart->print(";\n");
+							break;
+				case 'G':	locatorRequested = 1; break;
+							
+							
+				case 'A': 	//These should never be sent to the PIC
+							//put in as acknowledgement I haven't forgotten to deal with them
+				default: 	panic(rxString[0] + data, PI_UNKNOWN_CHARACTER); break;
+				
+				
+			};
+		}
+		else //we are setting data
+		{
+			switch(rxString[0]) //switch on control character
+			{
+				case 'I':	sync(data, IP, 0); break;
+				case 'H':	sync(data, HOSTNAME, 0); break;
+				case 'C':	sync(data, CALLSIGN, 0); break;
+				case 'L': 	sync(data, LOCATOR, 0); break;
+				case 'P':	sync(atoi(data.c_str()), POWER, 0); break; //Convert String to int
+				case 'B':	int temp[24];
+							for(int i = 0; i<24; i++)
+								temp[i] = data[i*2] - '0';
+							sync(temp, BAND, 0);
+							break;
+				case 'X': 	sync(atoi(data.c_str()), TX_PERCENTAGE, 0); break; //Convert String to int
+				case 'D':	int dTemp[12];
+							for(int i = 0; i<12; i++)
+								dTemp[i] = data[i*2] - '0';	
+							sync(dTemp, TX_DISABLE, 0);
+							break;
+				case 'S': 	//These all fallthrough deliberately
+				case 'V':	//These should not be sent with extra data
+				case 'U': 	//They are put here as acknowledgement that
+				case 'F':	//I haven't forgotten to deal with them
+				case 'A':
+				case 'G':
+				case 'T':
+				default:	panic(rxString[0] + data, PI_UNKNOWN_CHARACTER); break;
+			};		
+		}
+	}
+}
+
+int supervisor::sync(supervisor::settings_t::time_t newTime, data_t type, const bool updatePi/*=1*/)
 {
 	if(type != TIME) panic(TIME_SYNC_FAILED);
-	if(	this->setting.time.day 		!= newTime.day ||
-		this->setting.time.month 	!= newTime.month ||
-		this->setting.time.year 	!= newTime.year ||
-		this->setting.time.hour 	!= newTime.hour ||
-		this->setting.time.minute 	!= newTime.minute ||
-		this->setting.time.second 	!= newTime.second)
+	if(	setting.time.hour != newTime.hour ||
+		setting.time.minute != newTime.minute ||
+		setting.time.second != newTime.second)
 	{
-		this->updatedFlags |= 1<<TIME;
+		char temp[5];
+		sprintf(temp, "%02i:%02i", setting.time.hour, setting.time.minute);
+		setting.timeString = String(temp);
+		updatedFlags |= 1<<TIME;
 	}		
-	this->setting.time = newTime;
 	
-	this->linuxTimeString = "T" + String(this->setting.time.day) +
-							"/" + String(this->setting.time.month) +
-							"/" + String(this->setting.time.year) +
-							" " + String(this->setting.time.hour) +
-							":" + String(this->setting.time.minute) +
-							":" + String(this->setting.time.second) +
-							";\n";
+	if(	setting.time.day != newTime.day ||
+		setting.time.month != newTime.month ||
+		setting.time.year != newTime.year)
+	{
+
+		char temp[8]; //needed as sprintf needs a char*, not a string
+		switch (dateFormat)
+		{
+			case BRITISH: sprintf(temp, "%02i/%02i/%02i", setting.time.day,setting.time.month,setting.time.year%100); break;					
+			case AMERICAN: sprintf(temp, "%02i/%02i/%02i", setting.time.month,setting.time.day,setting.time.year%100); break;
+			case GLOBAL: sprintf(temp, "%02i/%02i/%02i", setting.time.year%100,setting.time.month,setting.time.day); break;	
+		};
+		
+		setting.dateString = String(temp);
+		updatedFlags |= (1<<DATE);
+	}		
+	
+	setting.time = newTime;
+	char temp[20];
+	sprintf(temp, "T%02i/%02i/%02i %02i:%02i:%02i;\n", setting.time.day, setting.time.month, setting.time.year, setting.time.hour, setting.time.minute, setting.time.second);
+	linuxTimeString = String(temp);
+}
+
+void supervisor::pi_uart_register(HardwareSerial *uart)
+{
+	piUart = uart;
+	piUart->begin(115200);
+}
+
+void supervisor::gps_uart_register(HardwareSerial *gpsUart)
+{
+	gpsUart = gpsUart;
+	gpsUart->begin(9600);
+}
+
+int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*=1*/)
+{
+	switch(type)
+	{
+		case LOCATOR: 	//If we are here the data is a bit dumb, "GPS" means use onboard GPS, anything else is the locator
+						if(data == "GPS" && !setting.gpsEnabled)
+						{
+							setting.gpsEnabled = 1;
+							updatedFlags |= (1<<GPS);
+							if(updatePi)
+							{
+								piUart->print("LGPS;\n");
+								locatorRequested = 1;
+							}
+						}
+						else
+						{
+							if(setting.gpsEnabled)
+							{
+								setting.gpsEnabled = 0;
+								updatedFlags |= (1<<GPS);
+							}
+							
+							if(setting.locator != data)
+							{
+								setting.locator = data;
+								updatedFlags |= (1<<LOCATOR);
+								if(updatePi)
+									piUart->print("L" + setting.locator + ";\n");
+							}
+						}		
+						break;
+						
+						
+		case IP:		if(data != setting.ip)
+						{
+							setting.ip = data;
+							updatedFlags |= (1<<IP);
+							//Don't need to check whether this came from Pi, nothing else knows its IP address
+						}
+						break;
+						
+		case HOSTNAME:	if(data != setting.hostname)
+						{
+							setting.hostname = data;
+							updatedFlags |= (1<<HOSTNAME);
+							//Don't need to check whether this came from Pi, nothing else knows its hostname
+						}
+						break;
+						
+		case CALLSIGN:	if(data != setting.callsign)
+						{
+							setting.callsign = data;
+							updatedFlags |= (1<<CALLSIGN);
+							if(updatePi)
+								piUart->print("C" + setting.callsign + ";\n");
+						}
+						break;
+						
+		case STATUS:	if(data != setting.status)
+						{
+							setting.status = data;
+							updatedFlags |= (1<<STATUS);
+							if(updatePi)
+								piUart->print("S" + setting.status + ";\n");
+						}
+						break;
+			
+		default:		panic(INVALID_SYNC_PARAMETERS); break;	
+	};
+}
+
+int supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1*/)
+{
+	switch(type)
+	{
+		case POWER:		if(data != setting.power)
+						{
+							setting.power = data;
+							updatedFlags |= (1<<POWER);
+							if(updatePi)
+								piUart->print("P" + String(setting.power) + ";\n");
+						}
+						break;
+						
+		case TX_PERCENTAGE:
+						if(data != setting.txPercentage)
+						{
+							setting.txPercentage = data;
+							updatedFlags |= (1<<TX_PERCENTAGE);
+							if(updatePi)
+								piUart->print("T" + String(setting.txPercentage) + ";\n");
+						}
+						break;
+		default:		panic(INVALID_SYNC_PARAMETERS); break;	
+	};
+}
+int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1*/)
+{
+	int arraySize = sizeof(data)/sizeof(data[0]);
+	int targetArraySize;
+	int *destination;
+	String controlChar;
+	switch(type)
+	{
+		case BAND:	targetArraySize = 24;
+					destination = bandArray;
+					controlChar = "B";
+					break;
+		case TX_DISABLE:
+					targetArraySize = 12;
+					destination = txDisableArray;
+					controlChar = "D";
+					break;
+		default:	panic(INVALID_SYNC_PARAMETERS); break;	
+	};
+	
+	if(arraySize != targetArraySize) panic(INVALID_SYNC_PARAMETERS);
+	
+	bool changedFlag = 0;
+	for(int i = 0; i<targetArraySize; i++)
+	{
+		if(data[i] != destination[i])
+		{
+				changedFlag = 1;
+				destination[i] = data[i];
+		}
+	}
+	
+	if(updatePi && changedFlag)
+	{
+		piUart->print(controlChar + String(destination[0]));
+		for(int i = 1; i<targetArraySize; i++)
+			piUart->print("," + String(destination[i]));
+		piUart->print(";\n");
+	}
 }

@@ -54,17 +54,6 @@
 #define DEBUG 1 //set to 0 for normal mode
 #define SKIP_CALIBRATION 0
 
-//////////////////////////////
-//Memory Addresses in EEPROM//
-//////////////////////////////
-#define EEPROM_CALLSIGN_BASE_ADDRESS 0
-#define EEPROM_LOCATOR_BASE_ADDRESS 10
-#define EEPROM_POWER_ADDRESS 16
-#define EEPROM_TX_PERCENTAGE_ADDRESS 17
-#define EEPROM_DATE_FORMAT_ADDRESS 18
-#define EEPROM_BAND_BASE_ADDRESS 19
-#define EEPROM_TX_DISABLE_BASE_ADDRESS 44
-
 ///////////////////////
 //Configuration stuff//
 ///////////////////////
