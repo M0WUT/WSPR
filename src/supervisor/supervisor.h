@@ -5,10 +5,14 @@
 class supervisor
 {
 	public:
-		//Constructor loads data from EEPROM (if available) or loads default values
 		supervisor();
 		
+		//loads data from EEPROM (if available) or loads default values
+		void setup();
+		
 		enum data_t {CALLSIGN, LOCATOR, POWER, TX_DISABLE, DATE_FORMAT, TX_PERCENTAGE, STATUS, TIME, DATE, BAND, IP, HOSTNAME};
+		enum dateFormat_t {BRITISH, AMERICAN, GLOBAL};
+		
 		struct settings_t
 		{
 			String callsign;
@@ -46,6 +50,7 @@ class supervisor
 		int sync(String data, data_t type, const bool updatePi = 1);
 		int sync(struct supervisor::settings_t::time_t newTime, data_t type, const bool updatePi = 1);
 		int sync(int data, data_t type, const bool updatePi = 1);
+		int sync(supervisor::dateFormat_t data, supervisor::data_t type, const bool updatePi = 1);
 		int sync(int *data, data_t type, const bool updatePi = 1);
 		
 		//Used to indicate to main program that something has changed
@@ -59,8 +64,8 @@ class supervisor
 		void background_tasks();
 		
 		//Allows for registering of UART buses
-		void pi_uart_register(HardwareSerial *uart);
-		void gps_uart_register(HardwareSerial *gps);
+		void register_pi_uart(HardwareSerial *uart);
+		void register_gps_uart(HardwareSerial *uart);
 		
 		//Time last synched to bits of hardware;
 		volatile uint32_t piSyncTime;
@@ -82,7 +87,7 @@ class supervisor
 		TinyGPSPlus gps;
 		HardwareSerial *piUart = NULL;
 		HardwareSerial *gpsUart = NULL;
-		enum date_t {BRITISH, AMERICAN, GLOBAL} dateFormat;	
+		dateFormat_t dateFormat;	
 		
 		//EEPROM addresses
 		static const int EEPROM_CALLSIGN_BASE_ADDRESS = 0;

@@ -1,8 +1,9 @@
 #include "supervisor.h"
 
-supervisor::supervisor() : eeprom(EEPROM_CS)
+supervisor::supervisor() : eeprom(EEPROM_CS){}
+
+void supervisor::setup()
 {
-	
 	//Setup Band Control pins
 	pinMode(BAND0, OUTPUT);
 	digitalWrite(BAND0, LOW);
@@ -17,24 +18,93 @@ supervisor::supervisor() : eeprom(EEPROM_CS)
 		eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS+1) == 'I' && 
 		eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS+2) == 'D')
 	{
-		
-		//Load everything from eeprom
-		
+		///////////////////////////////
+		//Load everything from eeprom//
+		///////////////////////////////
+		String tempData;
+
 		//Load callsign
-				
+		tempData = "";
+		for(int i = 0; i < 10; i++)
+		{
+			char x = eeprom.read(EEPROM_CALLSIGN_BASE_ADDRESS + i);
+			if(x == 0) break;
+			else tempData += x;
+		}
+		sync(tempData, CALLSIGN);
+		
 		//Load locator
+		tempData = "";
+		for(int i = 0; i < 6; i++)
+		{
+			char x = eeprom.read(EEPROM_LOCATOR_BASE_ADDRESS + i);
+			if(x == 0) break;
+			else tempData += x;
+		}
+		sync(tempData, LOCATOR);
 		
 		//Load power
+		sync(eeprom.read(EEPROM_POWER_ADDRESS), POWER);
 		
 		//Load tx percentage
+		sync(eeprom.read(EEPROM_TX_PERCENTAGE_ADDRESS), TX_PERCENTAGE);
 		
 		//Load date format
+		sync((dateFormat_t)eeprom.read(EEPROM_DATE_FORMAT_ADDRESS), DATE_FORMAT);
 		
 		//Load txDisable Array
+		int tempDisableArray[12];
+		for(int i = 0; i<12; i++)
+		{
+			tempDisableArray[i] = (eeprom.read(EEPROM_TX_DISABLE_BASE_ADDRESS+i) == '1' ? 1 : 0);
+		}
+		sync(tempDisableArray, TX_DISABLE);
 		
 		//Load Band Array
+		int tempBandArray[24];
+		for(int i = 0; i<24; i++)
+		{
+			tempBandArray[i] = eeprom.read(EEPROM_TX_DISABLE_BASE_ADDRESS+i) - '0';
+		}
+		sync(tempBandArray, BAND);
 		
 	}
+	else
+	{
+		//EEPROM doesn't contain valid data, use defaults
+		sync("M0WUT", CALLSIGN);
+		sync("GPS", LOCATOR);
+		sync(23, POWER);
+		sync(20, TX_PERCENTAGE);
+		sync(BRITISH, DATE_FORMAT);
+		int defaultBand[24] = {7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7}; //All 20m
+		sync(defaultBand, BAND);
+		int defaultDisable[12] = {1,1,1,1,1,1,1,1,1,1,1,1}; //TX disabled for all bands
+		sync(defaultDisable, TX_DISABLE);
+		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS, 'L');
+		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+1, 'I');
+		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+2, 'D');
+	}
+}
+
+
+int supervisor::sync(supervisor::dateFormat_t data, supervisor::data_t type, const bool updatePi/*=1*/)
+{
+	if(dateFormat != data)
+	{
+		dateFormat = data;
+		char temp[8]; //needed as sprintf needs a char*, not a string
+		switch (dateFormat)
+		{
+			case BRITISH: sprintf(temp, "%02i/%02i/%02i", setting.time.day,setting.time.month,setting.time.year%100); break;					
+			case AMERICAN: sprintf(temp, "%02i/%02i/%02i", setting.time.month,setting.time.day,setting.time.year%100); break;
+			case GLOBAL: sprintf(temp, "%02i/%02i/%02i", setting.time.year%100,setting.time.month,setting.time.day); break;	
+		};
+		
+		setting.dateString = String(temp);
+		updatedFlags |= (1<<DATE);
+		
+	}	
 }
 
 bool supervisor::updated(supervisor::data_t type){return (updatedFlags >> type) & 0x01;}
@@ -241,15 +311,15 @@ int supervisor::sync(supervisor::settings_t::time_t newTime, data_t type, const 
 	linuxTimeString = String(temp);
 }
 
-void supervisor::pi_uart_register(HardwareSerial *uart)
+void supervisor::register_pi_uart(HardwareSerial *uart)
 {
 	piUart = uart;
 	piUart->begin(115200);
 }
 
-void supervisor::gps_uart_register(HardwareSerial *gpsUart)
+void supervisor::register_gps_uart(HardwareSerial *uart)
 {
-	gpsUart = gpsUart;
+	gpsUart = uart;
 	gpsUart->begin(9600);
 }
 
@@ -292,6 +362,9 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							setting.ip = data;
 							updatedFlags |= (1<<IP);
 							//Don't need to check whether this came from Pi, nothing else knows its IP address
+							#if DEBUG
+								PC.println("IP: " + setting.ip);
+							#endif
 						}
 						break;
 						
@@ -300,6 +373,9 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							setting.hostname = data;
 							updatedFlags |= (1<<HOSTNAME);
 							//Don't need to check whether this came from Pi, nothing else knows its hostname
+							#if DEBUG
+								PC.println("Hostname: " + setting.hostname);
+							#endif
 						}
 						break;
 						
@@ -309,6 +385,9 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							updatedFlags |= (1<<CALLSIGN);
 							if(updatePi)
 								piUart->print("C" + setting.callsign + ";\n");
+							#if DEBUG
+								PC.println("Callsign: " + setting.callsign);
+							#endif
 						}
 						break;
 						
@@ -318,6 +397,9 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							updatedFlags |= (1<<STATUS);
 							if(updatePi)
 								piUart->print("S" + setting.status + ";\n");
+							#if DEBUG
+								PC.println("Status: " + setting.status);
+							#endif
 						}
 						break;
 			
