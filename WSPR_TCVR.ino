@@ -119,7 +119,7 @@ void loop()
 			lcd_write(1,0, "server to start");
 			bool old_watchdog = digitalRead(PI_WATCHDOG);
 			
-			master.setup();
+			
 			
 			while(old_watchdog == digitalRead(PI_WATCHDOG)) //Wait until server starts i.e. watchdog pin changes
 			{ 
@@ -136,6 +136,7 @@ void loop()
 				delay(1000);
 				lcd_clear_line(2);
 			}
+			master.setup();
 			attachInterrupt(1, heartbeat, RISING); //INT1 is on RB14, will reset the watchdog timeout everytime the pin goes high.
 			state_clean();
 			digitalWrite(LED,LOW);

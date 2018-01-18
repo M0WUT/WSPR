@@ -1,8 +1,3 @@
-//////////////////
-//Version Number//
-//////////////////
-#define VERSION 0.1
-
 ////////////////////////////
 //Libraries - DO NOT TOUCH//
 ////////////////////////////
@@ -51,7 +46,7 @@
 //Enabled debug mode//
 //////////////////////
 
-#define DEBUG 1 //set to 0 for normal mode
+#define DEBUG  //comment out for normal mode
 #define OSC_ENABLED 0
 #define SKIP_CALIBRATION 0
 

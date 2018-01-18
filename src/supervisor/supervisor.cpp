@@ -1,5 +1,5 @@
 #include "supervisor.h"
-
+const String VERSION = "0.1";
 supervisor::supervisor() : eeprom(EEPROM_CS){}
 
 void supervisor::setup()
@@ -14,7 +14,7 @@ void supervisor::setup()
 	
 	//Attempt to load data from EEPROM, if no valid data, load defaults and save to EEPROM
 	
-	if( eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS) == 'L' && 
+	if( eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS) == 'W' && 
 		eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS+1) == 'I' && 
 		eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS+2) == 'D')
 	{
@@ -56,7 +56,7 @@ void supervisor::setup()
 		int tempDisableArray[12];
 		for(int i = 0; i<12; i++)
 		{
-			tempDisableArray[i] = (eeprom.read(EEPROM_TX_DISABLE_BASE_ADDRESS+i) == '1' ? 1 : 0);
+			tempDisableArray[i] = eeprom.read(EEPROM_TX_DISABLE_BASE_ADDRESS+i);
 		}
 		sync(tempDisableArray, TX_DISABLE);
 		
@@ -64,7 +64,7 @@ void supervisor::setup()
 		int tempBandArray[24];
 		for(int i = 0; i<24; i++)
 		{
-			tempBandArray[i] = eeprom.read(EEPROM_TX_DISABLE_BASE_ADDRESS+i) - '0';
+			tempBandArray[i] = eeprom.read(EEPROM_BAND_BASE_ADDRESS+i);
 		}
 		sync(tempBandArray, BAND);
 		
@@ -85,6 +85,11 @@ void supervisor::setup()
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+1, 'I');
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+2, 'D');
 	}
+	sync("Data loaded", STATUS);
+	
+	//Make it look live we've synced to prevent thinking server dead on startup
+	piSyncTime = millis();
+	gpsSyncTime = millis();
 }
 
 
@@ -94,13 +99,17 @@ int supervisor::sync(supervisor::dateFormat_t data, supervisor::data_t type, con
 	{
 		dateFormat = data;
 		char temp[8]; //needed as sprintf needs a char*, not a string
+		#ifdef DEBUG
+			PC.print("Date format: ");
+		#endif
 		switch (dateFormat)
 		{
-			case BRITISH: sprintf(temp, "%02i/%02i/%02i", setting.time.day,setting.time.month,setting.time.year%100); break;					
-			case AMERICAN: sprintf(temp, "%02i/%02i/%02i", setting.time.month,setting.time.day,setting.time.year%100); break;
-			case GLOBAL: sprintf(temp, "%02i/%02i/%02i", setting.time.year%100,setting.time.month,setting.time.day); break;	
+			case BRITISH: sprintf(temp, "%02i/%02i/%02i", setting.time.day,setting.time.month,setting.time.year%100); PC.print("DD/MM/YY"); break;					
+			case AMERICAN: sprintf(temp, "%02i/%02i/%02i", setting.time.month,setting.time.day,setting.time.year%100); PC.print("MM/DD/YY"); break;
+			case GLOBAL: sprintf(temp, "%02i/%02i/%02i", setting.time.year%100,setting.time.month,setting.time.day); PC.print("YY/MM/DD"); break;	
 		};
-		
+		PC.println("");
+		eeprom.write(EEPROM_DATE_FORMAT_ADDRESS, dateFormat);
 		setting.dateString = String(temp);
 		updatedFlags |= (1<<DATE);
 		
@@ -220,7 +229,7 @@ void supervisor::pi_handler()
 				case 'X':	piUart->print("X" + String(setting.txPercentage) + ";\n"); break;
 				case 'S':	piUart->print("S" + setting.status + ";\n"); break;
 				case 'T':	timeRequested = 1; break;
-				case 'V':	piUart->print("V" + String(VERSION) + ";\n"); break;
+				case 'V':	piUart->print("V" + VERSION + ";\n"); break;
 				case 'U':	//Deliberate fallthough as procedure is same for software and firmware updated
 				case 'F':	setting.upgradeChar = rxString[0]; break;
 				case 'D':	piUart->print("D");
@@ -238,8 +247,6 @@ void supervisor::pi_handler()
 				case 'A': 	//These should never be sent to the PIC
 							//put in as acknowledgement I haven't forgotten to deal with them
 				default: 	panic(rxString[0] + data, PI_UNKNOWN_CHARACTER); break;
-				
-				
 			};
 		}
 		else //we are setting data
@@ -332,6 +339,9 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 						{
 							setting.gpsEnabled = 1;
 							updatedFlags |= (1<<GPS);
+							#ifdef DEBUG
+								PC.println("Locator: GPS");
+							#endif
 							if(updatePi)
 							{
 								piUart->print("LGPS;\n");
@@ -348,8 +358,12 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							
 							if(setting.locator != data)
 							{
+								
 								setting.locator = data;
 								updatedFlags |= (1<<LOCATOR);
+								#ifdef DEBUG
+									PC.println("Locator: " + setting.locator);
+								#endif
 								if(updatePi)
 									piUart->print("L" + setting.locator + ";\n");
 							}
@@ -362,7 +376,7 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							setting.ip = data;
 							updatedFlags |= (1<<IP);
 							//Don't need to check whether this came from Pi, nothing else knows its IP address
-							#if DEBUG
+							#ifdef DEBUG
 								PC.println("IP: " + setting.ip);
 							#endif
 						}
@@ -373,7 +387,7 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							setting.hostname = data;
 							updatedFlags |= (1<<HOSTNAME);
 							//Don't need to check whether this came from Pi, nothing else knows its hostname
-							#if DEBUG
+							#ifdef DEBUG
 								PC.println("Hostname: " + setting.hostname);
 							#endif
 						}
@@ -385,7 +399,7 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							updatedFlags |= (1<<CALLSIGN);
 							if(updatePi)
 								piUart->print("C" + setting.callsign + ";\n");
-							#if DEBUG
+							#ifdef DEBUG
 								PC.println("Callsign: " + setting.callsign);
 							#endif
 						}
@@ -397,7 +411,7 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							updatedFlags |= (1<<STATUS);
 							if(updatePi)
 								piUart->print("S" + setting.status + ";\n");
-							#if DEBUG
+							#ifdef DEBUG
 								PC.println("Status: " + setting.status);
 							#endif
 						}
@@ -415,6 +429,10 @@ int supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1*
 						{
 							setting.power = data;
 							updatedFlags |= (1<<POWER);
+							eeprom.write(EEPROM_POWER_ADDRESS, setting.power);
+							#ifdef DEBUG
+								PC.println("Power: " + String(setting.power) + "dBm");
+							#endif
 							if(updatePi)
 								piUart->print("P" + String(setting.power) + ";\n");
 						}
@@ -425,6 +443,10 @@ int supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1*
 						{
 							setting.txPercentage = data;
 							updatedFlags |= (1<<TX_PERCENTAGE);
+							eeprom.write(EEPROM_TX_PERCENTAGE_ADDRESS, setting.txPercentage);
+							#ifdef DEBUG
+								PC.println("Tx Percentage: " + String(setting.txPercentage));
+							#endif
 							if(updatePi)
 								piUart->print("T" + String(setting.txPercentage) + ";\n");
 						}
@@ -437,17 +459,20 @@ int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1
 	int arraySize = sizeof(data)/sizeof(data[0]);
 	int targetArraySize;
 	int *destination;
+	int eepromBaseAddress;
 	String controlChar;
 	switch(type)
 	{
 		case BAND:	targetArraySize = 24;
 					destination = bandArray;
 					controlChar = "B";
+					eepromBaseAddress = EEPROM_BAND_BASE_ADDRESS;
 					break;
 		case TX_DISABLE:
 					targetArraySize = 12;
 					destination = txDisableArray;
 					controlChar = "D";
+					eepromBaseAddress = EEPROM_TX_DISABLE_BASE_ADDRESS;
 					break;
 		default:	panic(INVALID_SYNC_PARAMETERS); break;	
 	};
@@ -464,11 +489,30 @@ int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1
 		}
 	}
 	
-	if(updatePi && changedFlag)
+	if(changedFlag)
 	{
-		piUart->print(controlChar + String(destination[0]));
-		for(int i = 1; i<targetArraySize; i++)
-			piUart->print("," + String(destination[i]));
-		piUart->print(";\n");
+		#ifdef DEBUG
+			PC.print(controlChar == "B" ? "Band: " : "Tx Disable: ");
+		#endif
+		//Update EEPROM
+		for(int i = 0; i<targetArraySize; i++)
+		{
+			#ifdef DEBUG
+				PC.print(", " + String(destination[i]));
+			#endif
+			eeprom.write(eepromBaseAddress+i, destination[i]);
+		}
+		
+		#ifdef DEBUG
+			PC.println("");
+		#endif
+		//Update Pi
+		if(updatePi)
+		{
+			piUart->print(controlChar + String(destination[0]));
+			for(int i = 1; i<targetArraySize; i++)
+				piUart->print("," + String(destination[i]));
+			piUart->print(";\n");
+		}
 	}
 }

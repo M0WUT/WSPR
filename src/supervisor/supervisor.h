@@ -35,7 +35,7 @@ class supervisor
 			bool txDisable;
 			String dateString;
 			String timeString;
-			bool gpsEnabled;
+			bool gpsEnabled = 1;
 			bool gpsActive;
 			bool piActive;
 			char upgradeChar;
