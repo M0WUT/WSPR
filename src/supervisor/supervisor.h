@@ -11,7 +11,7 @@ class supervisor
 		void setup();
 		
 		enum data_t {CALLSIGN, LOCATOR, POWER, TX_DISABLE, DATE_FORMAT, TX_PERCENTAGE, STATUS, TIME, DATE, BAND, IP, HOSTNAME};
-		enum dateFormat_t {BRITISH, AMERICAN, GLOBAL};
+		enum dateFormat_t {AMERICAN, BRITISH, GLOBAL};
 		
 		struct settings_t
 		{
@@ -35,10 +35,9 @@ class supervisor
 			bool txDisable;
 			String dateString;
 			String timeString;
-			bool gpsEnabled = 1;
+			bool gpsEnabled = 0;
 			bool gpsActive;
 			bool piActive;
-			char upgradeChar;
 			String status;
 		};
 		
@@ -55,6 +54,7 @@ class supervisor
 		
 		//Used to indicate to main program that something has changed
 		bool updated(supervisor::data_t type);
+		void clearUpdateFlag(supervisor::data_t type);
 		
 		//Functions to ingest data
 		void pi_handler();

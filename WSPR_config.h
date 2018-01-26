@@ -42,20 +42,21 @@
 #define TX 6
 
 
-//////////////////////
-//Enabled debug mode//
-//////////////////////
+/////////////////
+//Debug Options//
+/////////////////
 
-#define DEBUG  //comment out for normal mode
-#define OSC_ENABLED 0
-#define SKIP_CALIBRATION 0
+//These check whether variable is defined rather than value so comment out to disable
+#define DEBUG 1 
+//#define OSC_ENABLED 1
+#define SKIP_CALIBRATION 1
 
 
 ///////////////////////
 //Configuration stuff//
 ///////////////////////
 #define LCD_CONTRAST 35 //0-63
-#define GPS_TIMEOUT 5000 //Time with no GPS activity before we assume GPS lock has been lost in ms
+#define GPS_TIMEOUT 2000 //Time with no GPS activity before we assume GPS lock has been lost in ms
 #define PI_TIMEOUT 5000 //Pi Timeout in ms
 
 

@@ -30,6 +30,7 @@ void panic(String message)
 		delay(500);
 	}
 }
+void panic(int message, int value){}
 
 void panic(String message, uint8_t error)
 {

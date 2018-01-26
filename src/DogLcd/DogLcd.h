@@ -13,6 +13,7 @@
  * along with DogLcd.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Copyright 2010 Eberhard Fahle <e.fahle@wayoda.org>
+ * Modified 2017/2018 Dan McGraw, M0WUT
  */
 #ifndef DOG_LCD_h
 #define DOG_LCD_h
@@ -131,6 +132,12 @@ class DogLcd : public Print {
      * If the value is outside the valid range the method does nothing.
      */
     void setContrast(int contrast);
+
+	//M0WUT - writes to LCD from location row,col
+	void write(int row, int col, String data);
+
+	//M0WUT - clears 1 line on the display
+	void clear_line(int row);
 
     /**
      * Clears the display and moves the cursor back to 
