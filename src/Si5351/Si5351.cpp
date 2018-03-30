@@ -29,11 +29,11 @@ unsigned int Si5351::bc_solve(double x0, uint64_t &num, uint64_t &den)
         g = 1.0/(g-(double)s);
 	    if(err>abs((double)num/(double)den-x0))
 		{
-			if((b>1048575) || (c>1048575)) panic("b and/or c out of range"); // For Si5351, b and c need to be 20 bit values (1048575 is 2^20 - 1)
+			if((b>1048575) || (c>1048575)) panic(SI5351_DIVIDER_ERROR); // For Si5351, b and c need to be 20 bit values (1048575 is 2^20 - 1)
 			return iter;
 		}
     } while((iter++<1e3) && (num<1048576) && (den<1048576)); //Max of 1000 iterations (most numbers I threw at it in testing terminated within 20)
-    panic("Couldn't express required fraction");
+    panic(SI5351_DIVIDER_ERROR);
     return 0;
 }
 
@@ -43,10 +43,8 @@ void Si5351::stopTransmission()
 	switch(Wire.endTransmission())
 		{
 			case 0: break;
-			case 1: panic("Data does not fit in TX buffer"); break;
-			case 2: panic("I2C device not responding"); break;
-			case 3: panic("I2C responding but not acknowledging data"); break;
-			default: panic("Unrecognised I2C error, WTF did you do??");
+			case 2: panic(I2C_NOT_RESPONDING); break;
+			default: panic(WEIRD_I2C_ERROR);
 		}
 	
 	
@@ -72,7 +70,7 @@ uint8_t Si5351::I2C_read(uint8_t address)
 void Si5351::set_freq(uint8_t clock, uint8_t pll, double target_frequency)
 {
 
-	if(clock>2) panic("Invalid output selected");
+	if(clock>2) panic(INVALID_CLOCK);
 	//Output frequency = PLL Frequency / (a+b/c)
 	//so a+b/c = VCO frequency / target frequency
 	double a;
@@ -83,13 +81,13 @@ void Si5351::set_freq(uint8_t clock, uint8_t pll, double target_frequency)
 	{
 		case PLL_A: pll_frequency = this->plla_frequency; break;
 		case PLL_B: pll_frequency = this->pllb_frequency; break;
-		default: panic("Invalid PLL specified");		
+		default: panic(INVALID_PLL);		
 	};
 
 	
 	a = floor(pll_frequency / target_frequency);
 	
-	if(a<6 | a>1800 | ((a==1800) & (b>0))) panic("Target output frequency produced invalid multipliers");
+	if(a<6 | a>1800 | ((a==1800) & (b>0))) panic(SI5351_DIVIDER_ERROR);
 	
 	double remainder = pll_frequency - (target_frequency * a);
 	remainder /= target_frequency;
@@ -99,7 +97,7 @@ void Si5351::set_freq(uint8_t clock, uint8_t pll, double target_frequency)
 	//Calculate actual output frequency
 	double actual_output=pll_frequency/(a+(double)b/(double)c);
 	
-	#if TALKATIVE
+	#if DEBUG
 		PC.print("Setting clock ");
 		PC.print(clock);
 		PC.print(" to ");
@@ -172,23 +170,11 @@ void Si5351::I2C_write(uint8_t address, uint8_t data, uint8_t length)
 	stopTransmission();
 }
 
-
-
-void Si5351::check_status()
-{
-	if(I2C_read(1)>0)
-	{
-		I2C_write(OUTPUT_ENABLE_REG, ALL_CLOCKS_DISABLED); // if not locked system, something has gone really wrong so shutdown
-		panic("PLL lost lock");
-	}
-}
-
 void Si5351::set_PLL(uint8_t pll, uint64_t xtal_frequency, uint32_t target_pll_output)
 {
-
 	// VCO output = Xtal_freq * (a+b/c)
 	if(target_pll_output>600000000 & target_pll_output<900000000);
-	else panic("VCO frequency must be in range 600MHz - 900MHz");
+	else panic(VCO_ERROR);
 	uint64_t a,b,c;
 	a=target_pll_output/xtal_frequency;
 	double remainder = target_pll_output - (xtal_frequency * a);
@@ -203,35 +189,33 @@ void Si5351::set_PLL(uint8_t pll, uint64_t xtal_frequency, uint32_t target_pll_o
 	if(pll==PLL_A)
 	{
 		this->plla_frequency = actual_pll_output;
-		#if TALKATIVE 
-		PC.print("Attempting to set PLL A to ");
+		#if DEBUG 
+			PC.print("Attempting to set PLL A to ");
 		#endif
 	}
 	else if(pll==PLL_B)
 	{
 		this->pllb_frequency = actual_pll_output;
-		#if TALKATIVE
-		PC.print("Attempting to set PLL B to ");
+		#if DEBUG
+			PC.print("Attempting to set PLL B to ");
 		#endif
 	}
-	else panic("Invalid PLL Identifier");
+	else panic(INVALID_PLL);
 	
-	#if TALKATIVE
-	PC.print(target_pll_output);
-	PC.print("Hz, Actual Frequency: ");
-	PC.print(actual_pll_output);
-	PC.println("Hz");
+	#if DEBUG
+		PC.print(target_pll_output);
+		PC.print("Hz, Actual Frequency: ");
+		PC.print(actual_pll_output);
+		PC.println("Hz");
 	#endif
 	
 	
 	//Ensure actual frequency is within 10Hz of target (May edit this if it's unreasonable)
 	if(target_pll_output-actual_pll_output>10) //Actual will always be lower as integer division truncates
-	{
-		panic("Difference between target and actual PLL output frequency > 10Hz"); 
-	}
+		panic(SI5351_DIVIDER_ERROR); 
 	
 	//a+b/c must be >=15 and <=90
-	if(a<15 | a>90 | (a==90 & b>0)) panic ("VCO target produces invalid multipliers");
+	if(a<15 | a>90 | (a==90 & b>0)) panic (SI5351_DIVIDER_ERROR);
 	
 	uint32_t p1, p2, p3;
 	uint32_t intermediate = (uint32_t)(128.0*(double)b/(double)c); //value that is used more than once and is reasonably expensive to compute
@@ -279,14 +263,14 @@ void Si5351::begin(si5351_capacitance xtal_cap, uint32_t xtal_freq, int32_t corr
 	//Set Load capacitance for XTAL Oscillator//
 	////////////////////////////////////////////
 	if((xtal_cap!=0) && (xtal_cap<4)) I2C_write(XTAL_REG, ((xtal_cap<<6)| 0b010010));
-	else panic("Incorrect Crystal Capacitance specified"); // Incorrect capacitance specified
+	else panic(INCORRECT_CAPACITANCE); // Incorrect capacitance specified
 	
 	////////////////////////////////////////////////////////////////////////////////////////
 	//Set input clock divider, clock must be 10-40MHz, recommended 25MHz/27MHz fundamental//
 	////////////////////////////////////////////////////////////////////////////////////////
 	
 	if((10000000<xtal_freq) && (xtal_freq<40000000));
-	else panic("Invalid crystal frequency, must be in range 10MHz - 40MHz");
+	else panic(INCORRECT_XTAL_FREQ);
 	
 	if(correction != GPS_ENABLED) xtal_freq=xtal_freq-(xtal_freq*correction)/1000000;
 	
@@ -300,7 +284,7 @@ void Si5351::begin(si5351_capacitance xtal_cap, uint32_t xtal_freq, int32_t corr
 } 
 void Si5351::disable_clock(uint8_t clock)
 {
-	if(clock>7) panic("Attempted to access invalid clock");
+	if(clock>7) panic(INVALID_CLOCK);
 	uint8_t x = I2C_read(OUTPUT_ENABLE_REG);
 	x |= (1<<clock);
 	I2C_write(OUTPUT_ENABLE_REG, x);

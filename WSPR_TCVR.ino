@@ -112,7 +112,7 @@ void loop()
 				lcd.print(".");
 				digitalWrite(LED, dotNum&1);
 				delay(1000);
-				if(++dotNum >16)
+				if(++dotNum > 15)
 				{
 					lcd.clear_line(2);
 					lcd.setCursor(2,0);
@@ -231,11 +231,42 @@ void loop()
 					}
 					else
 					{
-						switch(WSPR::encode(tempCallsign, "aa00aa", 23, NULL, WSPR_NORMAL))
+						String lcd_message;
+						lcd_message.reserve(16);
+						switch(WSPR::encode(tempCallsign, "AA00aa", 23, NULL, WSPR_NORMAL)) //Test callsign for compatibility with WSPR standard
 						{
-							//TODO add checking to callsign
-							default: break;
+							case 0:	lcd_message = "";
+									master.sync(tempCallsign, supervisor::CALLSIGN); 
+									state = LOCATOR;
+									break;
+							case 1:  lcd_message = 	"Need 6 char loc in extended WSPR    Error 01    "; break;
+							case 2:  lcd_message = 	"  Callsign not  null terminated.    Error 02    "; break;
+							case 3:  lcd_message = 	"Only 1 / allowed  in callsign.      Error 03    "; break;
+							case 4:  lcd_message = 	"  Callsign is       too long        Error 04    "; break;
+							case 5:  lcd_message = 	"  Invalid char     in suffix        Error 05    "; break;
+							case 6:  lcd_message = 	"2 char suffixes must be numbers     Error 06    "; break;
+							case 7:  lcd_message = 	"  Invalid char     in prefix        Error 07    "; break;
+							case 8:  lcd_message = 	" Use of / char   is unsupported     Error 08    "; break;
+							case 9:  lcd_message = 	"  Invalid char    in callsign       Error 09    "; break;
+							case 10: lcd_message = 	"Invalid CallsignNeed num in 2/3     Error 10    "; break;
+							case 11: lcd_message = 	"  Invalid Main      Callsign        Error 11    "; break;
+							default: lcd_message = 	"    No Idea!                        Error 14    "; break;
+						
 						};
+						
+						if(lcd_message != "") //i.e. there is something wrong with the callsign
+						{
+							lcd.clear();
+							lcd.write(0,0, lcd_message);
+							delay(3000);
+							lcd.clear();
+							lcd.write(0,4, "Callsign");
+							lcd.write(1,0, tempCallsign);
+							editingFlag = 0;
+							substate = 0;
+						}
+
+							
 					}
 				}
 				while(menu_pressed())delay(50);
@@ -253,9 +284,9 @@ void loop()
 				}
 				else
 				{
+					//Already editing
 					while(tempCallsign.length() < substate) tempCallsign += "A"; //If editing char after callsign end, Pad with 'A's
 					if(tempCallsign.length() == substate) tempCallsign += " "; //If padding, make last character a space so when incremented, becomes an A
-					//Already editing
 					tempCallsign[substate] = callsignChar[callsignChar.indexOf(tempCallsign[substate])+1];	
 					//Looks a bit nasty, just replaces current char with next value in callsignChar which contains all letters, numbers, space and /
 					//Also nicely handles errors as indexOf(char_not_in_string) = -1 so this will replace with callsignChar[0] = 'A'
@@ -268,7 +299,7 @@ void loop()
 			}
 			break; 
 		} //case CALLSIGN
-		default: panic(INVALID_STATE_ACCESSED, state); break;
+		default: panic(INVALID_STATE_ACCESSED, String(state)); break;
 					
 
 

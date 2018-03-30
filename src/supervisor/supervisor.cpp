@@ -1,4 +1,6 @@
 #include "supervisor.h"
+//TODO: add sanity checking to synced data
+
 const String VERSION = "0.1";
 supervisor::supervisor() : eeprom(EEPROM_CS){}
 
@@ -14,7 +16,7 @@ void supervisor::setup()
 	
 	//Attempt to load data from EEPROM, if no valid data, load defaults and save to EEPROM
 	
-	if( eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS) == 'L' && //DEBUG
+	if( eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS) == 'L' && 
 		eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS+1) == 'I' && 
 		eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS+2) == 'D')
 	{
@@ -91,6 +93,9 @@ void supervisor::setup()
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+2, 'D');
 	}
 	sync("Data loaded", STATUS);
+	#ifdef DEBUG
+			PC.println("Loaded");
+	#endif
 	
 	//Make it look like we've synced to prevent thinking server dead on startup
 	piSyncTime = millis();
@@ -181,7 +186,9 @@ void supervisor::gps_handler()
 				gps.encode(gpsUart->read());
 			if(gps.location.isValid())
 			{
-				PC.println("sync valid GPS data");
+				#ifdef DEBUG
+					PC.println("sync valid GPS data");
+				#endif
 				sync(supervisor::settings_t::time_t{gps.date.day(), gps.date.month(), gps.date.year(), gps.time.hour(), gps.time.minute(), gps.time.second()}, TIME); 
 				sync(maidenhead(&gps), LOCATOR);
 			}
@@ -218,7 +225,7 @@ void supervisor::pi_handler()
 		
 
 		
-		if(rxString.substring(rxString.length()-1) != ";") panic(INCORRECT_UART_TERMINATION);
+		if(rxString.substring(rxString.length()-1) != ";") panic(INCORRECT_UART_TERMINATION, rxString.substring(rxString.length()-1));
 		
 		String data = rxString.substring(1, rxString.length() - 1); //Trim control characters
 		
@@ -273,7 +280,7 @@ void supervisor::pi_handler()
 							
 				case 'A': 	//These should never be sent to the PIC
 							//put in as acknowledgement I haven't forgotten to deal with them
-				default: 	panic(rxString[0] + data, PI_UNKNOWN_CHARACTER); break;
+				default: 	panic(PI_UNKNOWN_CHARACTER, rxString[0] + data); break;
 			};
 		}
 		else //we are setting data
@@ -303,7 +310,7 @@ void supervisor::pi_handler()
 				case 'A':
 				case 'G':
 				case 'T':
-				default:	panic(rxString[0] + data, PI_UNKNOWN_CHARACTER); break;
+				default:	panic(PI_UNKNOWN_CHARACTER, rxString[0] + data); break;
 			};		
 		}
 	}

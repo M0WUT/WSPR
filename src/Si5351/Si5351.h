@@ -41,7 +41,6 @@ class Si5351
 		
 	private:
 		unsigned int bc_solve(double x0, uint64_t &num, uint64_t &den);
-		void check_status();
 		void I2C_write(uint8_t address, uint8_t data);
 		void I2C_write(uint8_t address, uint8_t *data, uint8_t length);
 		void I2C_write(uint8_t address, uint8_t data, uint8_t length);

@@ -1,6 +1,6 @@
 #ifndef LC640H
 #define LC640H 
-#include <DSPI.h>
+#include "../DSPI/DSPI.h"
 
 #define write_enable 6
 #define write_command 2
