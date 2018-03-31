@@ -81,4 +81,4 @@ void panic(int error)
 	panic_loop(uartMessage + " Error: " + error, lcdMessage + "   Error: " + (error < 10) ? String("0") : String("") + String("   "));
 }
 
-
+void warn(String message){PC.println(message);}

@@ -12,7 +12,7 @@ uint8_t crossed_x[7] = {17,17,10,31,10,17,17};
 const String callsignChar = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/ A"; //the extra A means the index can be incremented from '/', next time it searches for 'A' it will returns 0 not 37 as it loops from the starts
 
 //State variable
-enum state_t{START, UNCONFIGURED, UNLOCKED, HOME, PANIC, CALLSIGN, CALLSIGN_CHECK, EXTENDED_CHECK, LOCATOR, LOCATOR_CHECK, POWER, POWER_WARNING, POWER_QUESTION, TX_PERCENTAGE, IP, BAND, OTHER_BAND_WARNING, ENCODING, DATE_FORMAT, CALIBRATING, TX_DISABLED_QUESTION} state = START;
+enum state_t{START, IP, CALLSIGN, LOCATOR, POWER, TX_PERCENTAGE, BAND, DATE_FORMAT, WAITING_FOR_LOCK, CALIBRATING, HOME} state = START;
 int substate = 0;
 bool stateInitialised = 0, editingFlag = 0;
 const uint32_t WSPR_TONE_DELAY = (uint32_t)(256000.0 * (double)CORE_TICK_RATE/375.0);
@@ -46,8 +46,6 @@ void setup()
 	#endif
 }
 
-
-
 void state_clean() //clears anything that needs to be cleaned up before changing state
 {
 	lcd.clear();
@@ -70,6 +68,7 @@ void heartbeat()
 
 uint32_t tx(uint32_t currentTime)
 {
+	//TODO: something here
 	return currentTime + WSPR_TONE_DELAY;
 }
 
@@ -239,18 +238,25 @@ void loop()
 									master.sync(tempCallsign, supervisor::CALLSIGN); 
 									state = LOCATOR;
 									break;
-							case 1:  lcd_message = 	"Need 6 char loc in extended WSPR    Error 01    "; break;
-							case 2:  lcd_message = 	"  Callsign not  null terminated.    Error 02    "; break;
-							case 3:  lcd_message = 	"Only 1 / allowed  in callsign.      Error 03    "; break;
-							case 4:  lcd_message = 	"  Callsign is       too long        Error 04    "; break;
-							case 5:  lcd_message = 	"  Invalid char     in suffix        Error 05    "; break;
-							case 6:  lcd_message = 	"2 char suffixes must be numbers     Error 06    "; break;
-							case 7:  lcd_message = 	"  Invalid char     in prefix        Error 07    "; break;
-							case 8:  lcd_message = 	" Use of / char   is unsupported     Error 08    "; break;
-							case 9:  lcd_message = 	"  Invalid char    in callsign       Error 09    "; break;
-							case 10: lcd_message = 	"Invalid CallsignNeed num in 2/3     Error 10    "; break;
-							case 11: lcd_message = 	"  Invalid Main      Callsign        Error 11    "; break;
-							default: lcd_message = 	"    No Idea!                        Error 14    "; break;
+							case 1:  lcd_message = 	"Need 6 char loc in extended WSPR    Error 17    "; break;
+							case 2:  lcd_message = 	"  Callsign not  null terminated.    Error 18    "; break;
+							case 3:  lcd_message = 	"Only 1 / allowed  in callsign.      Error 19    "; break;
+							case 4:  lcd_message = 	"  Callsign is       too long        Error 20    "; break;
+							case 5:  lcd_message = 	"  Invalid char     in suffix        Error 21    "; break;
+							case 6:  lcd_message = 	"2 char suffixes  must be 10-99      Error 22    "; break;
+							case 7:  lcd_message = 	"  Invalid char     in prefix        Error 23    "; break;
+							case 8:  lcd_message = 	" Use of / char   is unsupported     Error 24    "; break;
+							case 9:  lcd_message = 	"  Invalid char    in callsign       Error 25    "; break;
+							case 10: lcd_message = 	"Invalid CallsignNeed num in 2/3     Error 26    "; break;
+							case 11: lcd_message = 	"  Invalid Main      Callsign        Error 27    "; break;
+							case 21: 	if(!WSPR::encode(tempCallsign, "AA00aa", 23, NULL, WSPR_EXTENDED))
+										{
+											master.sync(tempCallsign, supervisor::CALLSIGN); 
+											state = LOCATOR;
+											break;
+										}
+										//Deliberate fallthrough if encode returns an error
+							default: lcd_message = 	"    No Idea!                        Error 28    "; break;
 						
 						};
 						
@@ -265,8 +271,6 @@ void loop()
 							editingFlag = 0;
 							substate = 0;
 						}
-
-							
 					}
 				}
 				while(menu_pressed())delay(50);

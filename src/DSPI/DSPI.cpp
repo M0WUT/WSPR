@@ -43,7 +43,7 @@
 
 #define OPT_BOARD_INTERNAL
 #include	<sys/attribs.h>
-#include	"./DSPI.h"
+#include	"DSPI.h"
 
 #if defined(_SPI1CON_ENHBUF_POSITION)
 #define ENH_BUFFER _SPI1CON_ENHBUF_POSITION

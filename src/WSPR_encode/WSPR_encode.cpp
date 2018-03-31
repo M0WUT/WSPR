@@ -3,14 +3,14 @@
 //Expects callsign  and locator as null-terminated arrays and returns results in wspr_symbols 
 
 
-/*Limitations: 	maximum 6 character callsign, NO '/' operators (i.e. TF/M0WUT) even if under 6 chars
+/*Limitations: 	maximum 6 character in the main callsign, 
 				Callsign must have a number as the second or third character i.e. 3XY1T will fail
 				These constraints are imposed by basic WSPR protocol
 */
 
 static int mix(uint32_t x, uint32_t k)
 {
-	return(((x)<<(k)) | ((x)>>(32-(k))));
+	return((x<<k) | (x>>(32-k)));
 }
 
 static int WSPR_hash(char *callsign, uint8_t callsign_length)
@@ -83,7 +83,7 @@ static int is_sub_loc_char(char x) //Subsquare Locator characters constrained to
 	else return 0;
 }
 
-int isnum(char x)
+static int isnum(char x)
 {
 	if (x>='0' && x<='9') return 1;
 	else return 0;
@@ -166,8 +166,7 @@ int WSPR::encode(String callsign, String locator, int power, char *wspr_symbols,
 		callsign_modifier[0] = callsign[callsign_length-1];
 		mode = SINGLE_SUFFIX;
 		callsign_length -= 2; //Remove length due to suffix from callsign_length
-		if(isnum(callsign_modifier[0]) || ischar(callsign_modifier[0]));
-		else return 5;
+		if(!isnum(callsign_modifier[0]) && !ischar(callsign_modifier[0])) return 5;
 		for(int i = 0; i<slash_location; i++) //Copy the main body of the callsign to trimmed_callsign
 		{
 			trimmed_callsign[i]=callsign[i];
@@ -179,7 +178,7 @@ int WSPR::encode(String callsign, String locator, int power, char *wspr_symbols,
 		callsign_modifier[1] = callsign[callsign_length-1];
 		mode = DOUBLE_SUFFIX;
 		callsign_length -= 3; //Remove length due to suffix from callsign_length
-		if(isnum(callsign_modifier[0]) && isnum(callsign_modifier[1])); //Check both are numbers
+		if(isnum(callsign_modifier[0]) && (callsign_modifier[0] != '0') && isnum(callsign_modifier[1])); //Check in range 10 - 99
 		else return 6;
 		for(int i = 0; i<slash_location; i++) //Copy the main body of the callsign to trimmed_callsign
 		{

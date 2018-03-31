@@ -82,7 +82,7 @@ class supervisor
 		String linuxTimeString;
 		int bandArray[24];
 		int txDisableArray[12];
-		int filter[12];		
+		int filter[12]; 
 		uint32_t updatedFlags = 0; //Used as a 32 bit array of updated bits, indexed by data_t
 		TinyGPSPlus gps;
 		HardwareSerial *piUart = NULL;

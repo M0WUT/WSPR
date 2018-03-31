@@ -29,6 +29,7 @@
 
 void panic(int error);
 void panic(int error, String value);
+void warn(String message);
 void register_lcd_for_panic(DogLcd *new_lcd);
 
 #endif

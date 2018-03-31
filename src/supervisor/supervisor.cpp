@@ -1,5 +1,5 @@
 #include "supervisor.h"
-//TODO: add sanity checking to synced data
+//TODO: add filter settings
 
 const String VERSION = "0.1";
 supervisor::supervisor() : eeprom(EEPROM_CS){}
@@ -178,20 +178,17 @@ void supervisor::background_tasks()
 void supervisor::gps_handler()
 {
 	if (gpsUart == NULL) panic(GPS_UART_NOT_REGISTERED);
-	if(setting.gpsActive)
+	if(setting.gpsActive && gpsUart->available()) //If first expression is false, second expression is not evaluated
 	{
-		if(gpsUart->available()) //Has to be nested as this "if" can't be evaluated if a gps object hasn't been initialised
+		while(gpsUart->available())
+			gps.encode(gpsUart->read());
+		if(gps.location.isValid())
 		{
-			while(gpsUart->available())
-				gps.encode(gpsUart->read());
-			if(gps.location.isValid())
-			{
-				#ifdef DEBUG
-					PC.println("sync valid GPS data");
-				#endif
-				sync(supervisor::settings_t::time_t{gps.date.day(), gps.date.month(), gps.date.year(), gps.time.hour(), gps.time.minute(), gps.time.second()}, TIME); 
-				sync(maidenhead(&gps), LOCATOR);
-			}
+			#ifdef DEBUG
+				PC.println("sync valid GPS data");
+			#endif
+			sync(supervisor::settings_t::time_t{gps.date.day(), gps.date.month(), gps.date.year(), gps.time.hour(), gps.time.minute(), gps.time.second()}, TIME); 
+			sync(maidenhead(&gps), LOCATOR);
 		}
 	}
 }
@@ -228,10 +225,7 @@ void supervisor::pi_handler()
 		if(rxString.substring(rxString.length()-1) != ";") panic(INCORRECT_UART_TERMINATION, rxString.substring(rxString.length()-1));
 		
 		String data = rxString.substring(1, rxString.length() - 1); //Trim control characters
-		
-		//Note that very little sanity checking is done on the data
-		//If implementing in your own system, might be worth adding
-		
+			
 		if(data == "") //no packet means Pi is requesting info
 		{
 			switch(rxString[0]) //switch on control character
@@ -399,16 +393,20 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							
 							if(setting.locator != data)
 							{
-								setting.locator = data;
-								updatedFlags |= (1<<LOCATOR);
-								#ifdef DEBUG
-									PC.println("Locator: " + setting.locator);
-								#endif
-								
-								if(updatePi)
-									//Assume that if the GPS is active that it is the source of the locator
-									piUart->print((setting.gpsActive ? "G" : "L") + setting.locator + ";\n");
-								
+								if(!WSPR::encode("M0WUT", data, 23, NULL, WSPR_NORMAL))
+								{
+									setting.locator = data;
+									updatedFlags |= (1<<LOCATOR);
+									#ifdef DEBUG
+										PC.println("Locator: " + setting.locator);
+									#endif
+									
+									if(updatePi)
+										//Assume that if the GPS is active that it is the source of the locator
+										piUart->print((setting.gpsActive ? "G" : "L") + setting.locator + ";\n");
+								}
+								else
+									warn("WARNING: Ignoring invalid locator: " + data);
 							}
 						}		
 						break;
@@ -438,13 +436,18 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 						
 		case CALLSIGN:	if(data != setting.callsign)
 						{
-							setting.callsign = data;
-							updatedFlags |= (1<<CALLSIGN);
-							if(updatePi)
-								piUart->print("C" + setting.callsign + ";\n");
-							#ifdef DEBUG
-								PC.println("Callsign: " + setting.callsign);
-							#endif
+							if(!WSPR::encode(data, "IO93fp", 23, NULL, WSPR_NORMAL) || (!WSPR::encode(data, "IO93fp", 23, NULL, WSPR_EXTENDED)))
+							{
+								setting.callsign = data;
+								updatedFlags |= (1<<CALLSIGN);
+								if(updatePi)
+									piUart->print("C" + setting.callsign + ";\n");
+								#ifdef DEBUG
+									PC.println("Callsign: " + setting.callsign);
+								#endif
+							}
+							else
+								warn("WARNING: Ignoring invalid callsign: " + data);	
 						}
 						break;
 						
@@ -470,28 +473,38 @@ int supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1*
 	{
 		case POWER:		if(data != setting.power)
 						{
-							setting.power = data;
-							updatedFlags |= (1<<POWER);
-							eeprom.write(EEPROM_POWER_ADDRESS, setting.power);
-							#ifdef DEBUG
-								PC.println("Power: " + String(setting.power) + "dBm");
-							#endif
-							if(updatePi)
-								piUart->print("P" + String(setting.power) + ";\n");
+							if(data < 61 && ((data % 10 == 0) || (data % 10 == 3) || (data % 10 == 7)))
+							{
+								setting.power = data;
+								updatedFlags |= (1<<POWER);
+								eeprom.write(EEPROM_POWER_ADDRESS, setting.power);
+								#ifdef DEBUG
+									PC.println("Power: " + String(setting.power) + "dBm");
+								#endif
+								if(updatePi)
+									piUart->print("P" + String(setting.power) + ";\n");
+							}
+							else
+								warn("WARNING: Ignoring invalid power: " + String(data));
 						}
 						break;
 						
 		case TX_PERCENTAGE:
 						if(data != setting.txPercentage)
 						{
-							setting.txPercentage = data;
-							updatedFlags |= (1<<TX_PERCENTAGE);
-							eeprom.write(EEPROM_TX_PERCENTAGE_ADDRESS, setting.txPercentage);
-							#ifdef DEBUG
-								PC.println("Tx Percentage: " + String(setting.txPercentage));
-							#endif
-							if(updatePi)
-								piUart->print("T" + String(setting.txPercentage) + ";\n");
+							if(data < 101 && data % 10 == 0)
+							{
+								setting.txPercentage = data;
+								updatedFlags |= (1<<TX_PERCENTAGE);
+								eeprom.write(EEPROM_TX_PERCENTAGE_ADDRESS, setting.txPercentage);
+								#ifdef DEBUG
+									PC.println("Tx Percentage: " + String(setting.txPercentage));
+								#endif
+								if(updatePi)
+									piUart->print("T" + String(setting.txPercentage) + ";\n");
+							}
+							else
+								warn("WARNING: Ignoring invalid power: " + String(data));
 						}
 						break;
 		default:		panic(INVALID_SYNC_PARAMETERS); break;	
@@ -503,6 +516,7 @@ int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1
 	int targetArraySize;
 	int *destination;
 	int eepromBaseAddress;
+	int maxValue;
 	String controlChar;
 	switch(type)
 	{
@@ -523,6 +537,7 @@ int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1
 	if(arraySize != targetArraySize) panic(INVALID_SYNC_PARAMETERS);
 	
 	bool changedFlag = 0;
+	bool invalidFlag = 0;
 	for(int i = 0; i<targetArraySize; i++)
 	{
 		if(data[i] != destination[i])
