@@ -19,8 +19,8 @@ class supervisor
 			String locator;
 			String ip;
 			String hostname;
-			int band;
-			int power;
+			int band; 
+			int power; //in dBm
 			struct time_t
 			{
 				int day;

@@ -140,9 +140,9 @@ void loop()
 				RPI.print("H;\n");
 				lcd.write(0,0, "IP and Hostname");
 				master.sync("Displaying Connection Info", supervisor::STATUS);		
-				while(menu_pressed()) delay(50);
-				while(edit_pressed())delay(50);
 				stateInitialised=1;
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50);
 			}
 			
 			if((master.settings().ip == "8.8.8.8") && (millis() - ipRequestedTime > PI_TIMEOUT)) panic(PI_NOT_RESPONDING);
@@ -181,13 +181,13 @@ void loop()
 			if(!stateInitialised)
 			{
 				lcd.write(0,4, "Callsign");
-				while(menu_pressed())delay(50);
-				while(edit_pressed())delay(50);
 				master.sync("Setting Callsign", supervisor::STATUS);		
 				lcd.write(1,0, master.settings().callsign);
 				master.clearUpdateFlag(supervisor::CALLSIGN);
 				tempCallsign = master.settings().callsign;
 				stateInitialised = 1;
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50);
 			}
 			
 			if(master.updated(supervisor::CALLSIGN)) //callsign has been updated from external source
@@ -239,7 +239,7 @@ void loop()
 									state = LOCATOR;
 									break;
 							case 1:  lcd_message = 	"Need 6 char loc in extended WSPR    Error 17    "; break;
-							case 2:  lcd_message = 	"  Callsign not  null terminated.    Error 18    "; break;
+							// case 2 got removed in rewrite
 							case 3:  lcd_message = 	"Only 1 / allowed  in callsign.      Error 19    "; break;
 							case 4:  lcd_message = 	"  Callsign is       too long        Error 20    "; break;
 							case 5:  lcd_message = 	"  Invalid char     in suffix        Error 21    "; break;
@@ -260,7 +260,7 @@ void loop()
 						
 						};
 						
-						if(lcd_message != "") //i.e. there is something wrong with the callsign
+						if(lcd_message != "") //there is something wrong with the callsign
 						{
 							lcd.clear();
 							lcd.write(0,0, lcd_message);
@@ -273,7 +273,7 @@ void loop()
 						}
 					}
 				}
-				while(menu_pressed())delay(50);
+				while(menu_pressed()) delay(50);
 			}
 			
 			if(edit_pressed())
@@ -299,10 +299,103 @@ void loop()
 					lcd.write(1,0, tempCallsign);
 					lcd.setCursor(1, substate);
 				}
-				while(edit_pressed())delay(50);
+				while(edit_pressed()) delay(50);
 			}
 			break; 
 		} //case CALLSIGN
+		
+		case LOCATOR:
+		{
+			if(!stateInitialised)
+			{
+				lcd.write(0,4, "Locator");
+				master.sync("Setting Locator", supervisor::STATUS);		
+				lcd.write(1,0, (master.settings().gpsEnabled ? "Set by GPS" : master.settings().locator));
+				master.clearUpdateFlag(supervisor::LOCATOR);
+				stateInitialised = 1;
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50);
+			}
+			
+			if(master.updated(supervisor::LOCATOR))
+			{
+				lcd.clear_line(1);
+				lcd.write(1,0, (master.settings().gpsEnabled ? "Set by GPS" : master.settings().locator));
+				master.clearUpdateFlag(supervisor::LOCATOR);
+			}
+			
+			if(menu_pressed())
+			{
+				state_clean();
+				state = POWER;
+				while(menu_pressed()) delay(50);
+			}
+			
+			if(edit_pressed())
+			{
+				lcd.write(2,0, "No other options");
+				delay(1000);
+				lcd.clear_line(2);
+				while(edit_pressed()) delay(50);
+			}
+			break;
+		} //case LOCATOR
+		
+		case POWER:
+		{
+			int tempPower;
+			const int powerValues[] = {0,3,7,10,13,17,20,23,27,30,33,37,40,43,47,50,53,57,60};
+			const String powerStrings[] = {"1mW", "2mW", "5mW", "10mW", "20mW", "50mW", "100mW", "200mW", "500mW", "1W", "2W", "5W", "10W", "20W", "50W", "100W", "200W", "500W", "1kW"};
+			if(!stateInitialised)
+			{
+				lcd.write(0,5, "Power");
+				master.sync("Setting Power", supervisor::STATUS);		
+				tempPower = master.settings().power;
+				lcd.write(1,(tempPower < 10 ? 12 : 11), String(tempPower) + "dBm"); //Power in dBm right aligned
+				lcd.write(1,0,powerStrings[(tempPower % 10) + (3 * (tempPower / 10))]); 
+				master.clearUpdateFlag(supervisor::POWER);
+				stateInitialised = 1;
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50);
+			}
+			
+			if(master.updated(supervisor::POWER))
+			{
+				tempPower = master.settings().power;
+				lcd.clear_line(1);
+				lcd.write(1,0,powerStrings[(tempPower % 10) + (3 * (tempPower / 10))]); 
+				lcd.write(1,(tempPower < 10 ? 12 : 11), String(tempPower) + "dBm"); //Power in dBm right aligned
+				master.clearUpdateFlag(supervisor::POWER);
+			}
+			
+			if(menu_pressed())
+			{
+				state_clean();
+				if(tempPower != master.settings().power)
+				{
+					lcd.clear();
+					lcd.write(0,2, "Only changes");
+					lcd.write(1,1, "reported power");
+					lcd.write(2,0, "Menu:OK Edit:"); //TODO
+				}
+				state = TX_PERCENTAGE;
+				while(menu_pressed()) delay(50);
+			}
+			
+			if(edit_pressed())
+			{
+				int powerIndex = ((tempPower % 10) + (3 * (tempPower / 10)) + 1) % (sizeof(powerValues) / sizeof(powerValues[0]));
+				tempPower = powerValues[powerIndex]; //Increase power to next index in powerValues, also handles errors as indexOf returns -1 if not found
+				lcd.clear_line(1);
+				lcd.write(1,0,powerStrings[powerIndex]); 
+				lcd.write(1,(tempPower < 10 ? 12 : 11), String(tempPower) + "dBm"); //Power in dBm right aligned
+				while(edit_pressed()) delay(50);
+			}
+				
+			break;
+		} //case POWER
+		
+		
 		default: panic(INVALID_STATE_ACCESSED, String(state)); break;
 					
 

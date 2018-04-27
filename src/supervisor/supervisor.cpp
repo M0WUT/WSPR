@@ -368,7 +368,7 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							if(!setting.gpsEnabled)
 							{
 								setting.gpsEnabled = 1;
-								updatedFlags |= (1<<GPS);
+								updatedFlags |= (1<<LOCATOR);
 								#ifdef DEBUG
 									PC.println("Locator: GPS");
 								#endif
@@ -387,7 +387,7 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 								if(setting.gpsEnabled)
 								{
 									setting.gpsEnabled = 0;
-									updatedFlags |= (1<<GPS);
+									updatedFlags |= (1<<LOCATOR);
 								}
 							}
 							
