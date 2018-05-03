@@ -194,13 +194,8 @@ void loop()
 			
 			if(master.updated(supervisor::CALLSIGN)) //callsign has been updated from external source
 			{
-				lcd.clear_line(1);
-				lcd.write(1,0, master.settings().callsign);
 				master.clearUpdateFlag(supervisor::CALLSIGN);
-				//overwrite any unsaved changes and stop editing
-				tempCallsign = master.settings().callsign;
-				editingFlag = 0;
-				substate = 0;
+				state_clean();
 			}
 			
 			
@@ -321,9 +316,8 @@ void loop()
 			
 			if(master.updated(supervisor::LOCATOR))
 			{
-				lcd.clear_line(1);
-				lcd.write(1,0, (master.settings().gpsEnabled ? "Set by GPS" : master.settings().locator));
 				master.clearUpdateFlag(supervisor::LOCATOR);
+				state_clean();
 			}
 			
 			if(menu_pressed())
@@ -345,7 +339,7 @@ void loop()
 		
 		case POWER:
 		{
-			int tempPower;
+			static int tempPower;
 			const int powerValues[] = {0,3,7,10,13,17,20,23,27,30,33,37,40,43,47,50,53,57,60};
 			const String powerStrings[] = {"1mW", "2mW", "5mW", "10mW", "20mW", "50mW", "100mW", "200mW", "500mW", "1W", "2W", "5W", "10W", "20W", "50W", "100W", "200W", "500W", "1kW"};
 			if(!stateInitialised)
@@ -354,7 +348,7 @@ void loop()
 				master.sync("Setting Power", supervisor::STATUS);		
 				tempPower = master.settings().power;
 				lcd.write(1,(tempPower < 10 ? 12 : 11), String(tempPower) + "dBm"); //Power in dBm right aligned
-				lcd.write(1,0,powerStrings[(tempPower % 10) + (3 * (tempPower / 10))]); 
+				lcd.write(1,0,powerStrings[((tempPower % 10)/3) + (3 * (tempPower / 10))]); //Little bit nasty using the /3. Due to integer divison converts 0 -> 0, 3->1, 7->2 which gives the index
 				master.clearUpdateFlag(supervisor::POWER);
 				stateInitialised = 1;
 				while(menu_pressed()) delay(50);
@@ -363,11 +357,8 @@ void loop()
 			
 			if(master.updated(supervisor::POWER))
 			{
-				tempPower = master.settings().power;
-				lcd.clear_line(1);
-				lcd.write(1,0,powerStrings[(tempPower % 10) + (3 * (tempPower / 10))]); 
-				lcd.write(1,(tempPower < 10 ? 12 : 11), String(tempPower) + "dBm"); //Power in dBm right aligned
 				master.clearUpdateFlag(supervisor::POWER);
+				state_clean();
 			}
 			
 			if(menu_pressed())
@@ -379,24 +370,31 @@ void loop()
 					lcd.write(0,2, "Only changes");
 					lcd.write(1,1, "reported power");
 					lcd.write(2,0, "Menu:OK Edit:"); //TODO
+					//TODO: handle next / back features, may need a new state
+					
 				}
-				state = TX_PERCENTAGE;
 				while(menu_pressed()) delay(50);
 			}
 			
 			if(edit_pressed())
 			{
-				int powerIndex = ((tempPower % 10) + (3 * (tempPower / 10)) + 1) % (sizeof(powerValues) / sizeof(powerValues[0]));
-				tempPower = powerValues[powerIndex]; //Increase power to next index in powerValues, also handles errors as indexOf returns -1 if not found
+				int powerIndex = ((tempPower % 10)/3) + (3 * (tempPower / 10));
+				powerIndex++;
+				powerIndex %= 19; //19 possible power values
+				tempPower = powerValues[powerIndex]; //Increase power to next index in powerValues
 				lcd.clear_line(1);
 				lcd.write(1,0,powerStrings[powerIndex]); 
 				lcd.write(1,(tempPower < 10 ? 12 : 11), String(tempPower) + "dBm"); //Power in dBm right aligned
 				while(edit_pressed()) delay(50);
 			}
-				
 			break;
 		} //case POWER
 		
+		case TX_PERCENTAGE:
+		{
+			
+			break;
+		} //case TX_PERCENTAGE
 		
 		default: panic(INVALID_STATE_ACCESSED, String(state)); break;
 					
