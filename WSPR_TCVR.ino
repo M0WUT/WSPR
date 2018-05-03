@@ -234,7 +234,7 @@ void loop()
 					{
 						String lcd_message;
 						lcd_message.reserve(16);
-						switch(WSPR::encode(tempCallsign, "AA00aa", 23, NULL, WSPR_NORMAL)) //Test callsign for compatibility with WSPR standard
+						switch(WSPR_encode(tempCallsign, "AA00aa", 23, NULL, WSPR_NORMAL)) //Test callsign for compatibility with WSPR standard
 						{
 							case 0:	lcd_message = "";
 									master.sync(tempCallsign, supervisor::CALLSIGN); 
@@ -251,7 +251,7 @@ void loop()
 							case 9:  lcd_message = 	"  Invalid char    in callsign       Error 25    "; break;
 							case 10: lcd_message = 	"Invalid CallsignNeed num in 2/3     Error 26    "; break;
 							case 11: lcd_message = 	"  Invalid Main      Callsign        Error 27    "; break;
-							case 21: 	if(!WSPR::encode(tempCallsign, "AA00aa", 23, NULL, WSPR_EXTENDED))
+							case 21: 	if(!WSPR_encode(tempCallsign, "AA00aa", 23, NULL, WSPR_EXTENDED))
 										{
 											master.sync(tempCallsign, supervisor::CALLSIGN); 
 											state = LOCATOR;

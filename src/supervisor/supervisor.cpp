@@ -393,7 +393,7 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							
 							if(setting.locator != data)
 							{
-								if(!WSPR::encode("M0WUT", data, 23, NULL, WSPR_NORMAL))
+								if(!WSPR_encode("M0WUT", data, 23, NULL, WSPR_NORMAL))
 								{
 									setting.locator = data;
 									updatedFlags |= (1<<LOCATOR);
@@ -436,7 +436,7 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 						
 		case CALLSIGN:	if(data != setting.callsign)
 						{
-							if(!WSPR::encode(data, "IO93fp", 23, NULL, WSPR_NORMAL) || (!WSPR::encode(data, "IO93fp", 23, NULL, WSPR_EXTENDED)))
+							if(!WSPR_encode(data, "IO93fp", 23, NULL, WSPR_NORMAL) || (!WSPR_encode(data, "IO93fp", 23, NULL, WSPR_EXTENDED)))
 							{
 								setting.callsign = data;
 								updatedFlags |= (1<<CALLSIGN);

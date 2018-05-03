@@ -12,17 +12,16 @@
 #include "WSPR_config.h"
 
 enum wsprMode {WSPR_NORMAL=0, WSPR_EXTENDED=1};
-namespace WSPR
-{
-	int encode(String callsign, String locator, int power, char *wsprSymbols, wsprMode encoding_mode);
+
+int WSPR_encode(String callsign, String locator, int power, int *wsprSymbols, wsprMode encoding_mode);
 	/*
 	callsign: string containing callsign for TX/RX with letters in UPPERCASE and numbers as ASCII
 	locator: string containing 4 or 6 character Maidenhead locater with letters in UPPERCASE and numbers as ASCII
 	power: in dBm
-	wsprSymbols: 162 long char array for the results to be stored in 
+	wsprSymbols: 162 long int array for the results to be stored in 
 	wsprMode: use WSPR_NORMAL for most encoding, if need to generate a 2nd set of symbols for encoded WSPR, set to WSPR_EXTENDED
 	*/
-}
+
 #endif
 
 

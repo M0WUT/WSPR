@@ -74,7 +74,7 @@ static int is_sub_loc_char(char x) {return (x>='a' && x<='x');}//Subsquare Locat
 
 static int is_num(char x) {return (x>='0' && x<='9');}
 
-int WSPR::encode(String callsign, String locator, int power, char *wsprSymbols, wsprMode encodingMode)
+int WSPR_encode(String callsign, String locator, int power, int *wsprSymbols, wsprMode encodingMode)
 {
 
 	/////////////////////////////////
@@ -103,7 +103,6 @@ int WSPR::encode(String callsign, String locator, int power, char *wsprSymbols, 
 			callsign[i]=locator[i+1];
 		}
 		callsign[5] = locator[0];
-		callsign[6] = '\0';
 	}
 	
 	
@@ -159,8 +158,9 @@ int WSPR::encode(String callsign, String locator, int power, char *wsprSymbols, 
 	
 	//Check all characters in main body of the callsign are number or capital letters
 	for(int i=0; i< mainCallsign.length(); i++)
-		if(!is_num(mainCallsign[i]) || is_char(mainCallsign[i]))
+		if(!is_num(mainCallsign[i]) && !is_char(mainCallsign[i]))
 			return 9;
+	
 	
 	//Callsign must have a number as the 3rd character, can be padded with a space at start if needed
 	if (!is_num(mainCallsign[2]))
@@ -172,11 +172,11 @@ int WSPR::encode(String callsign, String locator, int power, char *wsprSymbols, 
 			return 10;
 	}
 	
+	
 	//mainCallsign must be 6 characters long, pad with spaces
 	while(mainCallsign.length() < 6)
 		mainCallsign += ' ';
-	
-	
+
 	for(int i =3; i<6; i++)
 	{
 		if(is_num(mainCallsign[i])) return 11; //Last 3 char must not be numbers - WSPR spec
@@ -312,6 +312,13 @@ int WSPR::encode(String callsign, String locator, int power, char *wsprSymbols, 
 	}
 	#endif
 	
+	if(wsprSymbols == NULL)
+	{
+		PC.println("WSPR Encoding complete");
+		if (mode == NORMAL) return 0;
+		else return 21;
+	}
+	
 	///////////////////////////////////
 	//Convolve encoded data with taps//
 	///////////////////////////////////
@@ -325,9 +332,9 @@ int WSPR::encode(String callsign, String locator, int power, char *wsprSymbols, 
 		int byte_number=i/8;
 		int bit_number=i%8;
 		
-		data=(encoded_data[byte_number]>>(7-bit_number))&1;
+		data=(encoded_data[byte_number]>>(7-bit_number)) & 1;
 		
-		reg0=(reg0<<1)+data; //Append data to LSB of register
+		reg0=(reg0<<1) | data; //Append data to LSB of register
 	
 		
 		tapped0 = reg0 & 0xF2D05351; //Mask the register two different ways, the two masks are just what is defined in WSPR spec
@@ -339,9 +346,13 @@ int WSPR::encode(String callsign, String locator, int power, char *wsprSymbols, 
 			
 	}
 	
-	//////////////////////////////////////
-	//Horrendous bit shuffling technique//
-	//////////////////////////////////////
+	/////////////////////////////////////////////
+	//Shuffle bits and combine with sync vector//
+	/////////////////////////////////////////////
+	const char sync_vector[162]=	{1,1,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,1,0,0,1,0,1,1,1,1,0,0,0,0,0,0,0,1,0,0,1,0,1,0,0,
+								0,0,0,0,1,0,1,1,0,0,1,1,0,1,0,0,0,1,1,0,1,0,0,0,0,1,1,0,1,0,1,0,1,0,1,0,0,1,0,0,1,0,
+								1,1,0,0,0,1,1,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,0,1,0,0,1,1,1,0,1,1,0,0,1,1,0,1,0,0,0,1,
+								1,1,0,0,0,0,0,1,0,1,0,0,1,1,0,0,0,0,0,0,0,1,1,0,1,0,1,1,0,0,0,1,1,0,0,0};
 	uint8_t current_bit=0; //current bit being shuffled
 	for(uint8_t i=0; i<255; i++)
 	{
@@ -351,31 +362,17 @@ int WSPR::encode(String callsign, String locator, int power, char *wsprSymbols, 
 		j = (j & 0xCC) >> 2 | (j & 0x33) << 2;
 		j = (j & 0xAA) >> 1 | (j & 0x55) << 1;
 		
-		if(j<162) 	// If reversed i <162, move the current bit to the jth bit of wsprSymbols. This will happen 162 times exactly as i counts			
+		
+		if(j<162) 	// If reversed i <162, move the current bit to the jth bit of tempSymbols. This will happen 162 times exactly as i counts			
 		//from 0-255 as the reverse of 0-162 must all be 8 bits values 
 		{
-			wsprSymbols[j]=unshuffled[current_bit];
+			wsprSymbols[j]=((unshuffled[current_bit] << 1) | sync_vector[j]);
 			current_bit++;
 		}
 	}
 									
-	//////////////////////////////////////////
-	//Combine shuffled bits with sync vector//
-	//////////////////////////////////////////
-	
-	const char sync_vector[162]=	{1,1,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,1,0,0,1,0,1,1,1,1,0,0,0,0,0,0,0,1,0,0,1,0,1,0,0,
-									0,0,0,0,1,0,1,1,0,0,1,1,0,1,0,0,0,1,1,0,1,0,0,0,0,1,1,0,1,0,1,0,1,0,1,0,0,1,0,0,1,0,
-									1,1,0,0,0,1,1,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,0,1,0,0,1,1,1,0,1,1,0,0,1,1,0,1,0,0,0,1,
-									1,1,0,0,0,0,0,1,0,1,0,0,1,1,0,0,0,0,0,0,0,1,1,0,1,0,1,1,0,0,0,1,1,0,0,0};
-									
-	//Finally, ith 'bit' of wsprSymbols = ith bit of unsynced wsprSymbols *2 + ith bit of sync vector so will be 0-3
-	for(int i =0; i<162; i++)
-	{
-		wsprSymbols[i]=(wsprSymbols[i]<<1) | sync_vector[i];
-	}
-	
 	#ifdef DEBUG
-		PC.println("WSPR Encoding successful");
+		PC.println("WSPR Encoding complete");
 	#endif
 	if (mode == NORMAL) return 0;
 	else return 21;
