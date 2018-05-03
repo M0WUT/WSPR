@@ -371,7 +371,6 @@ void loop()
 					lcd.write(1,1, "reported power");
 					lcd.write(2,0, "Menu:OK Edit:"); //TODO
 					//TODO: handle next / back features, may need a new state
-					
 				}
 				while(menu_pressed()) delay(50);
 			}
