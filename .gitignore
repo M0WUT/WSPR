@@ -49,3 +49,4 @@ Temporary Items
 src/DSPI/*
 !src/DSPI/DSPI.cpp
 !src/DSPI/DSPI.h
+test/*

@@ -147,14 +147,14 @@ void loop()
 			
 			if((master.settings().ip == "8.8.8.8") && (millis() - ipRequestedTime > PI_TIMEOUT)) panic(PI_NOT_RESPONDING);
 			
-			if(master.updated(supervisor::CALLSIGN) && master.updated(supervisor::HOSTNAME))
+			if(master.updated(supervisor::IP) && master.updated(supervisor::HOSTNAME))
 			{
 				//We have got new connection information
 				if(master.settings().ip == "")
 				{
 					//Pi is not connected to network
-					lcd.write(1, 3, "No network");
-					lcd.write(2, 3, "connection");
+					lcd.write(1, 1, "No connection");
+					lcd.write(2, 1, "Edit: Refresh");
 				}
 				else
 				{
@@ -170,6 +170,8 @@ void loop()
 				state_clean();
 				state = CALLSIGN;
 			}
+			
+			if(edit_pressed()) state_clean(); //Re-query IP Address
 			break; 
 		} //case IP
 

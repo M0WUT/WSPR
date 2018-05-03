@@ -303,11 +303,12 @@ int WSPR::encode(String callsign, String locator, int power, char *wsprSymbols, 
 	encoded_data[9] = 0;
 	encoded_data[10] = 0;
 	
-	#if TALKATIVE
+	#ifdef DEBUG
+	PC.print("Encoded WSPR symbols: ");
 	for(int i =0; i<7; i++)
 	{
-		Serial.print(encoded_data[i],HEX);
-		Serial.print(" ");
+		PC.print(encoded_data[i],HEX);
+		PC.print(" ");
 	}
 	#endif
 	
@@ -373,8 +374,8 @@ int WSPR::encode(String callsign, String locator, int power, char *wsprSymbols, 
 		wsprSymbols[i]=(wsprSymbols[i]<<1) | sync_vector[i];
 	}
 	
-	#if TALKATIVE
-		Serial.println("WSPR Encoding successful");
+	#ifdef DEBUG
+		PC.println("WSPR Encoding successful");
 	#endif
 	if (mode == NORMAL) return 0;
 	else return 21;

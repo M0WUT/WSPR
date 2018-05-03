@@ -512,7 +512,6 @@ int supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1*
 }
 int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1*/)
 {
-	int arraySize = sizeof(data)/sizeof(data[0]);
 	int targetArraySize;
 	int *destination;
 	int eepromBaseAddress;
@@ -534,7 +533,6 @@ int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1
 		default:	panic(INVALID_SYNC_PARAMETERS); break;	
 	};
 	
-	if(arraySize != targetArraySize) panic(INVALID_SYNC_PARAMETERS);
 	
 	bool changedFlag = 0;
 	bool invalidFlag = 0;

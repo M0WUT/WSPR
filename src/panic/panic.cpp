@@ -13,7 +13,6 @@ static void panic_loop(String uartMessage, String lcdMessage)
 	pinMode(1,OUTPUT);
 	lcd->clear();
 	lcd->write(0, 0, lcdMessage);
-	
 	RPI.print("S"+uartMessage+";\n");
 	
 	while(1)
@@ -46,7 +45,7 @@ void panic(int error, String value)
 		
 	};
 	
-	panic_loop(uartMessage + " Error: " + error, lcdMessage + "   Error: " + (error < 10) ? String("0") : String("") + String("   "));
+	panic_loop(uartMessage + " Error: " + error, lcdMessage + "   Error: " + (error < 10 ? "0" : "") + error + "   ");
 	
 	
 }
@@ -78,7 +77,7 @@ void panic(int error)
 		
 	};
 	
-	panic_loop(uartMessage + " Error: " + error, lcdMessage + "   Error: " + (error < 10) ? String("0") : String("") + String("   "));
+	panic_loop(uartMessage + " Error: " + error, lcdMessage + "   Error: " + (error < 10 ? "0" : "") + error + "   ");
 }
 
 void warn(String message){PC.println(message);}
