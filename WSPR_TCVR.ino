@@ -2,7 +2,7 @@
 
 Si5351 osc;
 DogLcd lcd(21, 20, 24, 22); //I don't know why it's called that, not my library!
-supervisor master;
+supervisor master; //God object
 
 uint8_t gps_symbol[7] = {14,27,17,27,14,14,4}; //I would have made this const but threw type errors and had better things to do than edit someone else's library
 
@@ -23,10 +23,8 @@ void setup()
 	lcd.noCursor();
 	register_lcd_for_panic(&lcd);
 	
-	//RPI, PC and GPS are alternative names for the UART ports, defined in WSPR_config.h
-	RPI.begin(115200);
+	//PC is an alias for the onboard USB COM port, defined in WSPR_config.h
 	PC.begin(9600); 
-	GPS.begin(9600);
 	
 	master.register_pi_uart(&RPI);
 	master.register_gps_uart(&GPS);
@@ -109,6 +107,9 @@ void loop()
 			{ 
 				static int dotNum = 0;
 				lcd.print(".");
+				#ifdef DEBUG
+					PC.println("Waiting for server to start");
+				#endif
 				digitalWrite(LED, dotNum&1);
 				delay(1000);
 				if(++dotNum > 15)

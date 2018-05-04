@@ -97,33 +97,11 @@ void supervisor::setup()
 			PC.println("Loaded");
 	#endif
 	
-	//Make it look like we've synced to prevent thinking server dead on startup
+	//Make it look like we've synced with Pi to prevent server timeout on startup, want GPS to not be synced to prevent thinking GPS data is valid
 	piSyncTime = millis();
-	gpsSyncTime = millis();
-}
-
-
-int supervisor::sync(supervisor::dateFormat_t data, supervisor::data_t type, const bool updatePi/*=1*/)
-{
-	if(dateFormat != data)
-	{
-		dateFormat = data;
-		char temp[8]; //needed as sprintf needs a char*, not a string
-		#ifdef DEBUG
-			PC.print("Date format: ");
-		#endif
-		switch (dateFormat)
-		{
-			case BRITISH: sprintf(temp, "%02i/%02i/%02i", setting.time.day,setting.time.month,setting.time.year%100); PC.print("DD/MM/YY"); break;					
-			case AMERICAN: sprintf(temp, "%02i/%02i/%02i", setting.time.month,setting.time.day,setting.time.year%100); PC.print("MM/DD/YY"); break;
-			case GLOBAL: sprintf(temp, "%02i/%02i/%02i", setting.time.year%100,setting.time.month,setting.time.day); PC.print("YY/MM/DD"); break;	
-		};
-		PC.println("");
-		eeprom.write(EEPROM_DATE_FORMAT_ADDRESS, dateFormat);
-		setting.dateString = String(temp);
-		updatedFlags |= (1<<DATE);
-		
-	}	
+	gpsSyncTime = (millis() - 2 * GPS_TIMEOUT);
+	
+	
 }
 
 bool supervisor::updated(supervisor::data_t type){return (updatedFlags >> type) & 0x01;}
@@ -147,13 +125,18 @@ void supervisor::background_tasks()
 	
 	if(timeRequested && setting.gpsActive) //Only responds to time requests if we have valid GPS data
 	{
+		#ifdef DEBUG
+			PC.println("Sending requested time: " + linuxTimeString);
+		#endif
 		piUart->print(linuxTimeString);
 		timeRequested = 0;
 	}
 	
 	if(locatorRequested && setting.gpsActive)
 	{
-		PC.println("Sending requested locator");
+		#ifdef DEBUG
+			PC.println("Sending requested GPS locator: " + setting.locator);
+		#endif
 		piUart->print("G" + setting.locator + ";\n");
 		locatorRequested = 0;
 	}
@@ -310,6 +293,29 @@ void supervisor::pi_handler()
 	}
 }
 
+int supervisor::sync(supervisor::dateFormat_t data, supervisor::data_t type, const bool updatePi/*=1*/)
+{
+	if(dateFormat != data)
+	{
+		dateFormat = data;
+		char temp[8]; //needed as sprintf needs a char*, not a string
+		#ifdef DEBUG
+			PC.print("Date format: ");
+		#endif
+		switch (dateFormat)
+		{
+			case BRITISH: sprintf(temp, "%02i/%02i/%02i", setting.time.day,setting.time.month,setting.time.year%100); PC.print("DD/MM/YY"); break;					
+			case AMERICAN: sprintf(temp, "%02i/%02i/%02i", setting.time.month,setting.time.day,setting.time.year%100); PC.print("MM/DD/YY"); break;
+			case GLOBAL: sprintf(temp, "%02i/%02i/%02i", setting.time.year%100,setting.time.month,setting.time.day); PC.print("YY/MM/DD"); break;	
+		};
+		PC.println("");
+		eeprom.write(EEPROM_DATE_FORMAT_ADDRESS, dateFormat);
+		setting.dateString = String(temp);
+		updatedFlags |= (1<<DATE);
+		
+	}	
+}
+
 int supervisor::sync(supervisor::settings_t::time_t newTime, data_t type, const bool updatePi/*=1*/)
 {
 	if(type != TIME) panic(TIME_SYNC_FAILED);
@@ -372,6 +378,11 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 								#ifdef DEBUG
 									PC.println("Locator: GPS");
 								#endif
+								
+								//Save to EEPROM, zero padding up to 6 characters
+								for(int i = 0; i< 6; i++)
+									eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i < data.length() ? data[i] : 0));
+								
 								if(updatePi)
 								{
 									piUart->print("LGPS;\n");
@@ -380,26 +391,21 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 							}
 						}
 						else
-						{
-							if(!updatePi)
+						{						
+							if((setting.locator != data) || setting.gpsEnabled)
 							{
-								//It's coming from the Pi so a locator implies GPS disabled
-								if(setting.gpsEnabled)
-								{
-									setting.gpsEnabled = 0;
-									updatedFlags |= (1<<LOCATOR);
-								}
-							}
-							
-							if(setting.locator != data)
-							{
+								setting.gpsEnabled = 0;
+								updatedFlags |= (1<<LOCATOR);
 								if(!WSPR_encode("M0WUT", data, 23, NULL, WSPR_NORMAL))
 								{
 									setting.locator = data;
-									updatedFlags |= (1<<LOCATOR);
 									#ifdef DEBUG
 										PC.println("Locator: " + setting.locator);
 									#endif
+									
+									//Save to EEPROM, zero padding up to 6 characters
+									for(int i = 0; i< 6; i++)
+										eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i < data.length() ? data[i] : 0));
 									
 									if(updatePi)
 										//Assume that if the GPS is active that it is the source of the locator
@@ -445,6 +451,10 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 								#ifdef DEBUG
 									PC.println("Callsign: " + setting.callsign);
 								#endif
+								
+								//Save to EEPROM, zero padding up to 10 characters
+								for(int i = 0; i< 10; i++)
+									eeprom.write(EEPROM_CALLSIGN_BASE_ADDRESS + i, (i < data.length() ? data[i] : 0));
 							}
 							else
 								warn("WARNING: Ignoring invalid callsign: " + data);	
@@ -501,7 +511,7 @@ int supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1*
 									PC.println("Tx Percentage: " + String(setting.txPercentage));
 								#endif
 								if(updatePi)
-									piUart->print("T" + String(setting.txPercentage) + ";\n");
+									piUart->print("X" + String(setting.txPercentage) + ";\n");
 							}
 							else
 								warn("WARNING: Ignoring invalid power: " + String(data));
