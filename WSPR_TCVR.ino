@@ -12,7 +12,7 @@ uint8_t crossed_x[7] = {17,17,10,31,10,17,17};
 const String callsignChar = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/ A"; //the extra A means the index can be incremented from '/', next time it searches for 'A' it will returns 0 not 37 as it loops from the starts
 
 //State variable
-enum state_t{START, IP, CALLSIGN, LOCATOR, POWER, TX_PERCENTAGE, BAND, DATE_FORMAT, WAITING_FOR_LOCK, CALIBRATING, HOME} state = START;
+enum state_t{START, IP, CALLSIGN, LOCATOR, POWER, POWER_WARNING, TX_PERCENTAGE, BAND, DATE_FORMAT, WAITING_FOR_LOCK, CALIBRATING, HOME} state = START;
 int substate = 0;
 bool stateInitialised = 0, editingFlag = 0;
 const uint32_t WSPR_TONE_DELAY = (uint32_t)(256000.0 * (double)CORE_TICK_RATE/375.0);
@@ -88,7 +88,7 @@ void loop()
 		state = START;
 	}
 	
-	
+	static int tempPower; //Needs to be here as used in multiples states
 	switch (state) 
 	{
 		case START: //Note this first state isn't quite the same as the others as it is blocking. No point doing anything until server started
@@ -340,7 +340,6 @@ void loop()
 		
 		case POWER:
 		{
-			static int tempPower;
 			const int powerValues[] = {0,3,7,10,13,17,20,23,27,30,33,37,40,43,47,50,53,57,60};
 			const String powerStrings[] = {"1mW", "2mW", "5mW", "10mW", "20mW", "50mW", "100mW", "200mW", "500mW", "1W", "2W", "5W", "10W", "20W", "50W", "100W", "200W", "500W", "1kW"};
 			if(!stateInitialised)
@@ -366,13 +365,10 @@ void loop()
 			{
 				state_clean();
 				if(tempPower != master.settings().power)
-				{
-					lcd.clear();
-					lcd.write(0,2, "Only changes");
-					lcd.write(1,1, "reported power");
-					lcd.write(2,0, "Menu:OK Edit:"); //TODO
-					//TODO: handle next / back features, may need a new state
-				}
+					state = POWER_WARNING;
+				else
+					state = TX_PERCENTAGE;
+				
 				while(menu_pressed()) delay(50);
 			}
 			
@@ -390,9 +386,46 @@ void loop()
 			break;
 		} //case POWER
 		
+		case POWER_WARNING:
+		{
+			if(!stateInitialised)
+			{
+				lcd.write(0,2, "Only changes   reported power Menu:OK Edit:Rtn");
+				stateInitialised = 1;
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50);
+			}
+
+			if(menu_pressed())
+			{
+				state_clean();
+				master.sync(tempPower, supervisor::POWER);
+				state = TX_PERCENTAGE;
+				while(menu_pressed()) delay(50);
+			}
+			
+			if(edit_pressed())
+			{
+				state_clean();
+				state = POWER;
+				while(edit_pressed()) delay(50);
+			}
+			
+			break;
+		} //case POWER_WARNING
+		
 		case TX_PERCENTAGE:
 		{
-			
+			static int tempPercentage;
+			if(!stateInitialised)
+			{
+				lcd.write(0, 1, "TX Percentage");
+				tempPercentage = master.settings().txPercentage;
+				lcd.write(1,0, String(tempPercentage) +"%");
+				stateInitialised = 1;
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50); 
+			}
 			break;
 		} //case TX_PERCENTAGE
 		
