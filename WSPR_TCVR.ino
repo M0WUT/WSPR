@@ -578,6 +578,33 @@ void loop()
 			break;
 		} //case DATE_FORMAT
 		
+		case WAITING_FOR_LOCK:
+		{
+			if(!stateInitialised)
+			{
+				lcd.write(0,3, "Waiting for      GPS Lock       Edit: Back");
+				master.sync("Waiting for GPS Lock", supervisor::STATUS);
+				stateInitialised = 1;
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50);
+			}
+		
+			if(edit_pressed())
+			{	
+				state_clean();
+				state = LOCATOR;
+				while(edit_pressed()) delay(50);
+			}
+			
+			if(digitalRead(GPS_PPS))
+			{
+				state_clean();
+				state = CALIBRATING;
+			}
+			
+			break;
+		} //case WAITING_FOR_LOCK
+		
 		default: panic(INVALID_STATE_ACCESSED, String(state)); break;
 					
 
