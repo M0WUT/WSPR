@@ -37,8 +37,8 @@ void panic(int error, String value)
 	switch(error)
 	{
 		case INVALID_STATE_ACCESSED: uartMessage = "Tried to access invalid state: " + value; lcdMessage = "  Attempted to  access state " + value + " "; break;
-		case PI_INCOMPLETE_TRANSMISSON: uartMessage = "Incorrect UART Transmission. Last character" + value; lcdMessage = " Incorrect UART  Termination: " + value + " "; break;
-		case PI_UNKNOWN_CHARACTER: uartMessage = "Received unhandled string from Pi" + value; lcdMessage = "Unknown String: " + value.substring(0,16); break;
+		case PI_INCOMPLETE_TRANSMISSON: uartMessage = "Incorrect UART Transmission. Last character: " + value; lcdMessage = " Incorrect UART  Termination: " + value + " "; break;
+		case PI_UNKNOWN_CHARACTER: uartMessage = "Received unhandled string from Pi: " + value; lcdMessage = "Unknown String: " + value.substring(0,16); break;
 		
 		
 		

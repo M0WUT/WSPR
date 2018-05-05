@@ -34,6 +34,7 @@ class supervisor
 
 			int txPercentage;
 			bool txDisable;
+			dateFormat_t dateFormat;	
 			String dateString;
 			String timeString;
 			bool gpsEnabled = 0;
@@ -88,7 +89,6 @@ class supervisor
 		TinyGPSPlus gps;
 		HardwareSerial *piUart = NULL;
 		HardwareSerial *gpsUart = NULL;
-		dateFormat_t dateFormat;	
 		
 		//EEPROM addresses
 		static const int EEPROM_CALLSIGN_BASE_ADDRESS = 0;

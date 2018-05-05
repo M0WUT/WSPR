@@ -422,6 +422,7 @@ void loop()
 			if(!stateInitialised)
 			{
 				lcd.write(0, 1, "TX Percentage");
+				master.sync("Setting TX Percentage", supervisor::STATUS);
 				tempPercentage = master.settings().txPercentage;
 				lcd.write(1,0, String(tempPercentage) +"%");
 				stateInitialised = 1;
@@ -437,7 +438,7 @@ void loop()
 			
 			if(menu_pressed())
 			{
-				master.sync(tempPower, supervisor::TX_PERCENTAGE);
+				master.sync(tempPercentage, supervisor::TX_PERCENTAGE);
 				state_clean();
 				state = BAND;
 				while(menu_pressed()) delay(50);
@@ -459,6 +460,7 @@ void loop()
 			static int tempBand;
 			if(!stateInitialised)
 			{
+				master.sync("Setting Band", supervisor::STATUS);
 				tempBand = master.settings().band;
 				lcd.write(0,6, "Band");
 				lcd.write(1,0, (master.settings().bandhop ? "Bandhop" : bandStrings[tempBand]));
@@ -481,13 +483,14 @@ void loop()
 					for (int i = 0; i<24; i++)
 						tempBandArray[i] = tempBand;
 					master.sync(tempBandArray, supervisor::BAND);
-					master.background_tasks(); //Ensure tx disable gets update with new band schedule
 					state_clean();
-					if(master.settings().txDisable)
-						state = TX_DISABLED_QUESTION;
-					else
-						state = DATE_FORMAT;
+					state = TX_DISABLED_QUESTION;
 				}	
+				else
+				{
+					state_clean();
+					state = DATE_FORMAT;
+				}
 				while(menu_pressed()) delay(50);
 			}
 			
@@ -503,6 +506,78 @@ void loop()
 			
 			break;
 		} //case BAND
+		
+		case TX_DISABLED_QUESTION:
+		{
+			if(!stateInitialised)
+			{
+				lcd.write(0,2, "Enable TX on    chosen band?  Menu:Yes Edit:No");
+				stateInitialised = 1;
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50);
+			}
+
+			if(menu_pressed())
+			{
+				state_clean();
+				int txDisableArray[12] = {0,0,0,0,0,0,0,0,0,0,0,0}; //Enable TX on all bands
+				master.sync(txDisableArray, supervisor::TX_DISABLE);
+				state = DATE_FORMAT;
+				while(menu_pressed()) delay(50);
+			}
+			
+			if(edit_pressed())
+			{	
+				state_clean();
+				int txDisableArray[12] = {1,1,1,1,1,1,1,1,1,1,1,1}; //Disable TX on all bands
+				master.sync(txDisableArray, supervisor::TX_DISABLE);
+				state = DATE_FORMAT;
+				while(edit_pressed()) delay(50);
+			}
+			
+			break;
+		} //case TX_DISABLED_QUESTION
+		
+		case DATE_FORMAT:
+		{
+			static supervisor::dateFormat_t tempDateFormat;
+			const String dateFormatStrings[] = {"DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD"};
+			if(!stateInitialised)
+			{
+				tempDateFormat = master.settings().dateFormat;
+				master.sync("Setting Date Format", supervisor::STATUS);
+				lcd.write(0,2, "Date Format");
+				lcd.write(1,0, dateFormatStrings[tempDateFormat]);
+				stateInitialised = 1;
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50);
+			}
+			
+			if(master.updated(supervisor::DATE_FORMAT))
+			{
+				master.clearUpdateFlag(supervisor::DATE_FORMAT);
+				state_clean();
+			}
+			
+			if(menu_pressed())
+			{
+				master.sync(tempDateFormat, supervisor::DATE_FORMAT);
+				state_clean();
+				state = WAITING_FOR_LOCK;
+				while(menu_pressed()) delay(50);
+			}
+			
+			if(edit_pressed())
+			{
+				tempDateFormat = (supervisor::dateFormat_t)((((int) tempDateFormat) + 1) % 3);
+				lcd.clear_line(1);
+				lcd.write(1,0, dateFormatStrings[tempDateFormat]);
+				while(edit_pressed()) delay(50);
+			}
+			
+			break;
+		} //case DATE_FORMAT
+		
 		default: panic(INVALID_STATE_ACCESSED, String(state)); break;
 					
 

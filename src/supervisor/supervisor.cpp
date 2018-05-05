@@ -295,21 +295,21 @@ void supervisor::pi_handler()
 
 int supervisor::sync(supervisor::dateFormat_t data, supervisor::data_t type, const bool updatePi/*=1*/)
 {
-	if(dateFormat != data)
+	if(data != setting.dateFormat)
 	{
-		dateFormat = data;
+		setting.dateFormat = data;
 		char temp[8]; //needed as sprintf needs a char*, not a string
 		#ifdef DEBUG
 			PC.print("Date format: ");
 		#endif
-		switch (dateFormat)
+		switch (setting.dateFormat)
 		{
 			case BRITISH: sprintf(temp, "%02i/%02i/%02i", setting.time.day,setting.time.month,setting.time.year%100); PC.print("DD/MM/YY"); break;					
 			case AMERICAN: sprintf(temp, "%02i/%02i/%02i", setting.time.month,setting.time.day,setting.time.year%100); PC.print("MM/DD/YY"); break;
 			case GLOBAL: sprintf(temp, "%02i/%02i/%02i", setting.time.year%100,setting.time.month,setting.time.day); PC.print("YY/MM/DD"); break;	
 		};
 		PC.println("");
-		eeprom.write(EEPROM_DATE_FORMAT_ADDRESS, dateFormat);
+		eeprom.write(EEPROM_DATE_FORMAT_ADDRESS, setting.dateFormat);
 		setting.dateString = String(temp);
 		updatedFlags |= (1<<DATE);
 		
@@ -335,7 +335,7 @@ int supervisor::sync(supervisor::settings_t::time_t newTime, data_t type, const 
 	{
 
 		char temp[8]; //needed as sprintf needs a char*, not a string
-		switch (dateFormat)
+		switch (setting.dateFormat)
 		{
 			case BRITISH: sprintf(temp, "%02i/%02i/%02i", setting.time.day,setting.time.month,setting.time.year%100); break;					
 			case AMERICAN: sprintf(temp, "%02i/%02i/%02i", setting.time.month,setting.time.day,setting.time.year%100); break;
@@ -392,7 +392,7 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 						}
 						else
 						{						
-							if((setting.locator != data) || setting.gpsEnabled)
+							if((data != setting.locator) || setting.gpsEnabled)
 							{
 								setting.gpsEnabled = 0;
 								updatedFlags |= (1<<LOCATOR);
@@ -514,7 +514,7 @@ int supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1*
 									piUart->print("X" + String(setting.txPercentage) + ";\n");
 							}
 							else
-								warn("WARNING: Ignoring invalid power: " + String(data));
+								warn("WARNING: Ignoring invalid TX Percentage: " + String(data));
 						}
 						break;
 		default:		panic(INVALID_SYNC_PARAMETERS); break;	
