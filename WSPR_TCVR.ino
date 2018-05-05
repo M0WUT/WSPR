@@ -11,8 +11,12 @@ uint8_t crossed_x[7] = {17,17,10,31,10,17,17};
 
 const String callsignChar = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/ A"; //the extra A means the index can be incremented from '/', next time it searches for 'A' it will returns 0 not 37 as it loops from the starts
 
+const int powerValues[] = {0,3,7,10,13,17,20,23,27,30,33,37,40,43,47,50,53,57,60};
+const String powerStrings[] = {"1mW", "2mW", "5mW", "10mW", "20mW", "50mW", "100mW", "200mW", "500mW", "1W", "2W", "5W", "10W", "20W", "50W", "100W", "200W", "500W", "1kW"};
+const String bandStrings[]  = {"2200m", "630m", "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"};
+
 //State variable
-enum state_t{START, IP, CALLSIGN, LOCATOR, POWER, POWER_WARNING, TX_PERCENTAGE, BAND, DATE_FORMAT, WAITING_FOR_LOCK, CALIBRATING, HOME} state = START;
+enum state_t{START, IP, CALLSIGN, LOCATOR, POWER, POWER_WARNING, TX_PERCENTAGE, BAND, TX_DISABLED_QUESTION, DATE_FORMAT, WAITING_FOR_LOCK, CALIBRATING, HOME} state = START;
 int substate = 0;
 bool stateInitialised = 0, editingFlag = 0;
 const uint32_t WSPR_TONE_DELAY = (uint32_t)(256000.0 * (double)CORE_TICK_RATE/375.0);
@@ -340,8 +344,6 @@ void loop()
 		
 		case POWER:
 		{
-			const int powerValues[] = {0,3,7,10,13,17,20,23,27,30,33,37,40,43,47,50,53,57,60};
-			const String powerStrings[] = {"1mW", "2mW", "5mW", "10mW", "20mW", "50mW", "100mW", "200mW", "500mW", "1W", "2W", "5W", "10W", "20W", "50W", "100W", "200W", "500W", "1kW"};
 			if(!stateInitialised)
 			{
 				lcd.write(0,5, "Power");
@@ -390,7 +392,7 @@ void loop()
 		{
 			if(!stateInitialised)
 			{
-				lcd.write(0,2, "Only changes   reported power Menu:OK Edit:Rtn");
+				lcd.write(0,0, "Changes reportedpower only. OK? Menu:Yes Edit:No");
 				stateInitialised = 1;
 				while(menu_pressed()) delay(50);
 				while(edit_pressed()) delay(50);
@@ -426,9 +428,81 @@ void loop()
 				while(menu_pressed()) delay(50);
 				while(edit_pressed()) delay(50); 
 			}
+			
+			if(master.updated(supervisor::TX_PERCENTAGE))
+			{
+				master.clearUpdateFlag(supervisor::TX_PERCENTAGE);
+				state_clean();
+			}
+			
+			if(menu_pressed())
+			{
+				master.sync(tempPower, supervisor::TX_PERCENTAGE);
+				state_clean();
+				state = BAND;
+				while(menu_pressed()) delay(50);
+			}
+			
+			if(edit_pressed())
+			{
+				tempPercentage += 10;
+				tempPercentage %= 110; //Has to be 110 to allow 100% as an option
+				lcd.clear_line(1);
+				lcd.write(1,0, String(tempPercentage) + "%");
+				while(edit_pressed()) delay(50);
+			}
 			break;
 		} //case TX_PERCENTAGE
 		
+		case BAND:
+		{
+			static int tempBand;
+			if(!stateInitialised)
+			{
+				tempBand = master.settings().band;
+				lcd.write(0,6, "Band");
+				lcd.write(1,0, (master.settings().bandhop ? "Bandhop" : bandStrings[tempBand]));
+				stateInitialised = 1;
+				while(menu_pressed()) delay(50);
+				while(edit_pressed()) delay(50); 
+			}
+			
+			if(master.updated(supervisor::BAND))
+			{
+				master.clearUpdateFlag(supervisor::BAND);
+				state_clean();
+			}
+			
+			if(menu_pressed())
+			{
+				if(editingFlag) //Only sync if we have changed bands using buttons i.e. band doesn't change with time
+				{
+					int tempBandArray[24];
+					for (int i = 0; i<24; i++)
+						tempBandArray[i] = tempBand;
+					master.sync(tempBandArray, supervisor::BAND);
+					master.background_tasks(); //Ensure tx disable gets update with new band schedule
+					state_clean();
+					if(master.settings().txDisable)
+						state = TX_DISABLED_QUESTION;
+					else
+						state = DATE_FORMAT;
+				}	
+				while(menu_pressed()) delay(50);
+			}
+			
+			if(edit_pressed())
+			{
+				editingFlag = 1;
+				tempBand++;
+				tempBand %= 12;
+				lcd.clear_line(1);
+				lcd.write(1,0, bandStrings[tempBand]);
+				while(edit_pressed()) delay(50);	
+			}
+			
+			break;
+		} //case BAND
 		default: panic(INVALID_STATE_ACCESSED, String(state)); break;
 					
 

@@ -533,6 +533,7 @@ int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1
 					destination = bandArray;
 					controlChar = "B";
 					eepromBaseAddress = EEPROM_BAND_BASE_ADDRESS;
+					PC.println("Syncing band");
 					break;
 		case TX_DISABLE:
 					targetArraySize = 12;
@@ -560,6 +561,9 @@ int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1
 		#ifdef DEBUG
 			PC.print(controlChar == "B" ? "Band: " : "Tx Disable: ");
 		#endif
+		
+		setting.bandhop = 0;
+		
 		//Update EEPROM
 		for(int i = 0; i<targetArraySize; i++)
 		{
@@ -568,11 +572,16 @@ int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1
 				PC.print(String(destination[i]));
 			#endif
 			eeprom.write(eepromBaseAddress+i, destination[i]);
+			if(destination[i] != destination[0]) setting.bandhop = 1;	
 		}
 		
 		#ifdef DEBUG
-			PC.println("");
+			PC.println(""); //line feed after band array
+			PC.println(String("Bandhopping: ") + ((setting.bandhop == 1) ? "Yes" : "No"));
 		#endif
+		
+		//Set updated flag
+		updatedFlags |= (1<<type);
 		//Update Pi
 		if(updatePi)
 		{

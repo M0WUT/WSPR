@@ -20,6 +20,7 @@ class supervisor
 			String ip;
 			String hostname;
 			int band; 
+			bool bandhop;
 			int power; //in dBm
 			struct time_t
 			{
