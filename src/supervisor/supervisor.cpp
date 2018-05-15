@@ -93,9 +93,6 @@ void supervisor::setup()
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+2, 'D');
 	}
 	sync("Data loaded", STATUS);
-	#ifdef DEBUG
-			PC.println("Loaded");
-	#endif
 	
 	//Make it look like we've synced with Pi to prevent server timeout on startup, want GPS to not be synced to prevent thinking GPS data is valid
 	piSyncTime = millis();
@@ -111,13 +108,14 @@ struct supervisor::settings_t supervisor::settings() {return setting;}
 
 void supervisor::background_tasks()
 {
-	setting.gpsActive = setting.gpsEnabled && (millis() - gpsSyncTime < GPS_TIMEOUT);
+	PC.println(String("GPS Enabled: ") + (setting.gpsEnabled ? "Yes" : "No") + "\tTimeout: " + (millis() - gpsSyncTime < GPS_TIMEOUT ? "No" : "Yes"));
+	setting.gpsActive = (setting.gpsEnabled && (millis() - gpsSyncTime < GPS_TIMEOUT));
 	setting.piActive = (millis() - piSyncTime < PI_TIMEOUT);
 	
 	if(heartbeat)
 	{
 		#ifdef DEBUG
-			PC.println("Heartbeat");
+			PC.println(".");
 		#endif
 		piUart->print("A;\n"); //If PI has toggled GPIO to indicate activity acknowledge
 		heartbeat = 0;
@@ -163,6 +161,7 @@ void supervisor::gps_handler()
 	if (gpsUart == NULL) panic(GPS_UART_NOT_REGISTERED);
 	if(setting.gpsActive && gpsUart->available()) //If first expression is false, second expression is not evaluated
 	{
+		PC.println("have stuff");
 		while(gpsUart->available())
 			gps.encode(gpsUart->read());
 		if(gps.location.isValid())
@@ -315,7 +314,14 @@ int supervisor::sync(supervisor::dateFormat_t data, supervisor::data_t type, con
 		
 	}	
 }
-
+int supervisor::sync(bool data, data_t type, const bool updatePi /*= 1*/)
+{
+	if(type != GPS_ENABLE) panic(INVALID_SYNC_PARAMETERS);
+	if(data != setting.gpsEnabled)
+	{
+		setting.gpsEnabled = data;
+	}
+}
 int supervisor::sync(supervisor::settings_t::time_t newTime, data_t type, const bool updatePi/*=1*/)
 {
 	if(type != TIME) panic(TIME_SYNC_FAILED);
@@ -324,8 +330,9 @@ int supervisor::sync(supervisor::settings_t::time_t newTime, data_t type, const 
 		setting.time.second != newTime.second)
 	{
 		char temp[5];
-		sprintf(temp, "%02i:%02i", setting.time.hour, setting.time.minute);
+		sprintf(temp, "%02i:%02i", newTime.hour, newTime.minute);
 		setting.timeString = String(temp);
+		
 		updatedFlags |= 1<<TIME;
 	}		
 	
@@ -333,20 +340,19 @@ int supervisor::sync(supervisor::settings_t::time_t newTime, data_t type, const 
 		setting.time.month != newTime.month ||
 		setting.time.year != newTime.year)
 	{
-
 		char temp[8]; //needed as sprintf needs a char*, not a string
 		switch (setting.dateFormat)
 		{
-			case BRITISH: sprintf(temp, "%02i/%02i/%02i", setting.time.day,setting.time.month,setting.time.year%100); break;					
-			case AMERICAN: sprintf(temp, "%02i/%02i/%02i", setting.time.month,setting.time.day,setting.time.year%100); break;
-			case GLOBAL: sprintf(temp, "%02i/%02i/%02i", setting.time.year%100,setting.time.month,setting.time.day); break;	
+			case BRITISH: sprintf(temp, "%02i/%02i/%02i", newTime.day,newTime.month,newTime.year%100); break;					
+			case AMERICAN: sprintf(temp, "%02i/%02i/%02i", newTime.month,newTime.day,newTime.year%100); break;
+			case GLOBAL: sprintf(temp, "%02i/%02i/%02i", newTime.year%100,newTime.month,newTime.day); break;	
 		};
 		
 		setting.dateString = String(temp);
 		updatedFlags |= (1<<DATE);
 	}		
-	
 	setting.time = newTime;
+	
 	char temp[25];
 	sprintf(temp, "T%04i-%02i-%02i %02i:%02i:%02i;\n", setting.time.year, setting.time.month, setting.time.day, setting.time.hour, setting.time.minute, setting.time.second);
 	linuxTimeString = String(temp);
@@ -517,6 +523,7 @@ int supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1*
 								warn("WARNING: Ignoring invalid TX Percentage: " + String(data));
 						}
 						break;
+		case CALIBRATION: break; //TODO
 		default:		panic(INVALID_SYNC_PARAMETERS); break;	
 	};
 }

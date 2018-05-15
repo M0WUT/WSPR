@@ -42,10 +42,15 @@ void setup()
 	digitalWrite(LED, LOW);
 	pinMode(TX, OUTPUT);
 	digitalWrite(TX, LOW);
+	
 
-	#ifdef OSC_ENABLED
-		osc.begin(XTAL_10pF, 25000000,GPS_ENABLED);
-	#endif
+	T2CON = 0x00;
+	T3CON = 0x00;
+	TMR2 = 0x00;
+	PR2 = 0xFFFFFFFF;
+	T2CKR = PIN_A0;
+	T2CON = (TIMER_ENABLED | NO_PRESCALER | MODE_32_BIT_TIMER | EXTERNAL_SOURCE);
+	attachInterrupt(GPS_PPS_INTERRUPT, pps_handler, RISING);
 }
 
 void state_clean() //clears anything that needs to be cleaned up before changing state
@@ -62,6 +67,7 @@ bool menu_pressed() {return !digitalRead(MENU_BTN);}
 
 bool edit_pressed() {return !digitalRead(EDIT_BTN);}
 
+//Interrrupts
 void heartbeat()
 {
 	master.heartbeat = 1;
@@ -74,6 +80,19 @@ uint32_t tx(uint32_t currentTime)
 	return currentTime + WSPR_TONE_DELAY;
 }
 
+void pps_handler()
+{
+	static int counter = 0;
+	if(++counter == 80)
+	{
+		//master.sync(TMR2, supervisor::CALIBRATION); //DEBUG
+		TMR2 = 0;
+		counter = 0;
+	}
+	master.gpsSyncTime = millis();
+}
+
+//Main code
 void loop()
 {
 	master.gps_handler();
@@ -124,6 +143,9 @@ void loop()
 				}
 			}
 			master.setup();
+			#ifdef OSC_ENABLED
+				osc.begin(XTAL_10pF, 25000000, osc.GPS_ENABLED);
+			#endif 
 			attachInterrupt(1, heartbeat, RISING); //INT1 is on RB14, will reset the watchdog timeout everytime the pin goes high.
 			state_clean();
 			digitalWrite(LED,LOW);
@@ -605,6 +627,36 @@ void loop()
 			break;
 		} //case WAITING_FOR_LOCK
 		
+		case CALIBRATING:
+		{
+			static int i = 160;
+			if(!stateInitialised)
+			{
+				i=160;
+				master.sync("Calibrating - roughly 160 seconds remaining", supervisor::STATUS);
+				osc.set_freq(2,1,2500000.0);
+				lcd.write(0,2, "Calibrating");
+				lcd.write(1,1, "This will take");
+				lcd.write(2,0, "about 160 second");
+				master.clearUpdateFlag(supervisor::TIME);
+				stateInitialised = 1;
+				while(menu_pressed()) delay(50); 
+				while(edit_pressed()) delay(50);
+			}
+			
+			if(master.updated(supervisor::TIME))
+			{
+				master.clearUpdateFlag(supervisor::TIME);
+				i--;
+				lcd.clear_line(2);
+				lcd.write(2, 0, "about " + String(i) + "seconds");
+				master.sync("Calibrating - roughly " + String(i) + " seconds remaining", supervisor::STATUS);
+			}
+			
+			
+			
+			break;
+		} //case CALIBRATING
 		default: panic(INVALID_STATE_ACCESSED, String(state)); break;
 					
 

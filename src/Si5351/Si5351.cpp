@@ -9,7 +9,7 @@ unsigned int Si5351::bc_solve(double x0, uint64_t &num, uint64_t &den)
 	//Expresses x0 as a fraction num/den, err is acceptable error for the expression
 	//This is heavily based on answer from StackOverflow user PinkFloyd in this discussion: http://stackoverflow.com/questions/5124743/algorithm-for-simplifying-decimal-to-fractions
 	//The routine he suggests is, itself, based on routine by Ian Richards, Continued Fractions without Tears 1981 https://www.maa.org/sites/default/files/pdf/upload_library/22/Allendoerfer/1982/0025570x.di021121.02p0002y.pdf 
-	const double err= 1e-10;
+	const double error= 1e-10;
 	double g = abs(x0);
     uint64_t a = 0;
     uint64_t b = 1;
@@ -17,9 +17,9 @@ unsigned int Si5351::bc_solve(double x0, uint64_t &num, uint64_t &den)
     uint64_t d = 0;
     uint64_t s;
     uint32_t iter= 0;
-    do 
+	while((abs(((double)num/(double)den)-x0)) > error)
 	{
-        s = floor(g);
+	    s = floor(g);
         num = a + s*c;
         den = b + s*d;
         a = c;
@@ -27,14 +27,9 @@ unsigned int Si5351::bc_solve(double x0, uint64_t &num, uint64_t &den)
         c = num;
         d = den;
         g = 1.0/(g-(double)s);
-	    if(err>abs((double)num/(double)den-x0))
-		{
-			if((b>1048575) || (c>1048575)) panic(SI5351_DIVIDER_ERROR); // For Si5351, b and c need to be 20 bit values (1048575 is 2^20 - 1)
-			return iter;
-		}
-    } while((iter++<1e3) && (num<1048576) && (den<1048576)); //Max of 1000 iterations (most numbers I threw at it in testing terminated within 20)
-    panic(SI5351_DIVIDER_ERROR);
-    return 0;
+		if((iter++>1e3) || (num>1048576) || (den>1048576)) panic(SI5351_DIVIDER_ERROR);
+    } 
+	return iter;
 }
 
 void Si5351::stopTransmission()
@@ -97,7 +92,7 @@ void Si5351::set_freq(uint8_t clock, uint8_t pll, double target_frequency)
 	//Calculate actual output frequency
 	double actual_output=pll_frequency/(a+(double)b/(double)c);
 	
-	#if DEBUG
+	#ifdef DEBUG
 		PC.print("Setting clock ");
 		PC.print(clock);
 		PC.print(" to ");
@@ -189,20 +184,20 @@ void Si5351::set_PLL(uint8_t pll, uint64_t xtal_frequency, uint32_t target_pll_o
 	if(pll==PLL_A)
 	{
 		this->plla_frequency = actual_pll_output;
-		#if DEBUG 
+		#ifdef DEBUG 
 			PC.print("Attempting to set PLL A to ");
 		#endif
 	}
 	else if(pll==PLL_B)
 	{
 		this->pllb_frequency = actual_pll_output;
-		#if DEBUG
+		#ifdef DEBUG
 			PC.print("Attempting to set PLL B to ");
 		#endif
 	}
 	else panic(INVALID_PLL);
 	
-	#if DEBUG
+	#ifdef DEBUG
 		PC.print(target_pll_output);
 		PC.print("Hz, Actual Frequency: ");
 		PC.print(actual_pll_output);

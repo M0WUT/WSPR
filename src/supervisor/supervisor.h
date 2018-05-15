@@ -10,7 +10,7 @@ class supervisor
 		//loads data from EEPROM (if available) or loads default values
 		void setup();
 		
-		enum data_t {CALLSIGN, LOCATOR, POWER, TX_DISABLE, DATE_FORMAT, TX_PERCENTAGE, STATUS, TIME, DATE, BAND, IP, HOSTNAME};
+		enum data_t {CALLSIGN, GPS_ENABLE, LOCATOR, POWER, TX_DISABLE, DATE_FORMAT, TX_PERCENTAGE, STATUS, TIME, DATE, BAND, IP, HOSTNAME, CALIBRATION};
 		enum dateFormat_t {AMERICAN, BRITISH, GLOBAL};
 		
 		struct settings_t
@@ -51,6 +51,7 @@ class supervisor
 		int sync(String data, data_t type, const bool updatePi = 1);
 		int sync(struct supervisor::settings_t::time_t newTime, data_t type, const bool updatePi = 1);
 		int sync(int data, data_t type, const bool updatePi = 1);
+		int sync(bool data, data_t type, const bool updatePi = 1);
 		int sync(supervisor::dateFormat_t data, supervisor::data_t type, const bool updatePi = 1);
 		int sync(int *data, data_t type, const bool updatePi = 1);
 		

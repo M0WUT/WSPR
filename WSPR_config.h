@@ -10,6 +10,7 @@
 #include "src/LC640/LC640.h"
 #include "src/maidenhead/maidenhead.h"
 #include "src/supervisor/supervisor.h"
+#include "src/Wire2/Wire2.h"
 
 #if ARDUINO >= 100
  #include "Arduino.h"
@@ -24,7 +25,6 @@
 #define GPS Serial1
 #define PC Serial
 #define RPI Serial0
-#define TIMEOUT 2000 //Timeout for Pi traffic in ms
 #define LED 1
 #define TIMER_ENABLED 1<<15
 #define NO_PRESCALER 0
@@ -49,7 +49,7 @@
 
 //These check whether variable is defined rather than value so comment out to disable
 #define DEBUG 1 
-//#define OSC_ENABLED 1
+#define OSC_ENABLED 1
 #define SKIP_CALIBRATION 1
 
 
