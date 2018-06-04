@@ -39,7 +39,7 @@ void panic(int error, String value)
 		case INVALID_STATE_ACCESSED: uartMessage = "Tried to access invalid state: " + value; lcdMessage = "  Attempted to  access state " + value + " "; break;
 		case PI_INCOMPLETE_TRANSMISSON: uartMessage = "Incorrect UART Transmission. Last character: " + value; lcdMessage = " Incorrect UART  Termination: " + value + " "; break;
 		case PI_UNKNOWN_CHARACTER: uartMessage = "Received unhandled string from Pi: " + value; lcdMessage = "Unknown String: " + value.substring(0,16); break;
-		
+		case INVALID_SYNC_PARAMETERS: 	uartMessage = "Invalid Sync Parameters: " + value; lcdMessage = "  Invalid Sync     Parameters   "; break;
 		
 		
 		
@@ -61,7 +61,6 @@ void panic(int error)
 		case PI_UART_NOT_REGISTERED: 	uartMessage = "No Pi UART registered with supervisor.";				lcdMessage = "     Pi not        registered   "; break;
 		case PI_INCOMPLETE_TRANSMISSON: uartMessage = "Incomplete UART Transmission";						lcdMessage = "Incomplete UART   transmission  "; break;
 		case TIME_SYNC_FAILED: 			uartMessage = "Time Sync Failed"; 									lcdMessage = "   Time Sync         Failed     "; break;
-		case INVALID_SYNC_PARAMETERS: 	uartMessage = "Invalid Sync Parameters"; 							lcdMessage = "  Invalid Sync     Parameters   "; break;
 		case SI5351_DIVIDER_ERROR: 		uartMessage = "Error calculating Si5351 divider"; 					lcdMessage = " Si5351 Divider      Error      "; break;
 		case I2C_NOT_RESPONDING: 		uartMessage = "Si5351 not responding"; 								lcdMessage = "   Si5351 not      responding   "; break;
 		case WEIRD_I2C_ERROR: 			uartMessage = "I2C is unhappy";										lcdMessage = "  Unknown I2C        Error      "; break;

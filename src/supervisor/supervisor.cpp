@@ -92,7 +92,9 @@ void supervisor::setup()
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+1, 'I');
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+2, 'D');
 	}
-	sync("Data loaded", STATUS);
+	//PC.println("before stupid line"); //DEBUG
+	//sync("Data loaded", STATUS); //DEBUG
+	//PC.println("after stupid line"); //DEBUG
 	
 	//Make it look like we've synced with Pi to prevent server timeout on startup, want GPS to not be synced to prevent thinking GPS data is valid
 	piSyncTime = millis();
@@ -167,7 +169,7 @@ void supervisor::gps_handler()
 		if(gps.location.isValid())
 		{
 			#ifdef DEBUG
-				PC.println("sync valid GPS data");
+				PC.println("synced valid GPS data");
 			#endif
 			sync(supervisor::settings_t::time_t{gps.date.day(), gps.date.month(), gps.date.year(), gps.time.hour(), gps.time.minute(), gps.time.second()}, TIME); 
 			sync(maidenhead(&gps), LOCATOR);
@@ -292,7 +294,7 @@ void supervisor::pi_handler()
 	}
 }
 
-int supervisor::sync(supervisor::dateFormat_t data, supervisor::data_t type, const bool updatePi/*=1*/)
+void supervisor::sync(supervisor::dateFormat_t data, supervisor::data_t type, const bool updatePi/*=1*/)
 {
 	if(data != setting.dateFormat)
 	{
@@ -314,15 +316,8 @@ int supervisor::sync(supervisor::dateFormat_t data, supervisor::data_t type, con
 		
 	}	
 }
-int supervisor::sync(bool data, data_t type, const bool updatePi /*= 1*/)
-{
-	if(type != GPS_ENABLE) panic(INVALID_SYNC_PARAMETERS);
-	if(data != setting.gpsEnabled)
-	{
-		setting.gpsEnabled = data;
-	}
-}
-int supervisor::sync(supervisor::settings_t::time_t newTime, data_t type, const bool updatePi/*=1*/)
+
+void supervisor::sync(supervisor::settings_t::time_t newTime, data_t type, const bool updatePi/*=1*/)
 {
 	if(type != TIME) panic(TIME_SYNC_FAILED);
 	if(	setting.time.hour != newTime.hour ||
@@ -370,7 +365,7 @@ void supervisor::register_gps_uart(HardwareSerial *uart)
 	gpsUart->begin(9600);
 }
 
-int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*=1*/)
+void supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*=1*/)
 {
 	switch(type)
 	{
@@ -479,11 +474,11 @@ int supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*
 						}
 						break;
 			
-		default:		panic(INVALID_SYNC_PARAMETERS); break;	
+		default:		panic(INVALID_SYNC_PARAMETERS, String(type) + ", " + data); break;	
 	};
 }
 
-int supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1*/)
+void supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1*/)
 {
 	switch(type)
 	{
@@ -523,11 +518,24 @@ int supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1*
 								warn("WARNING: Ignoring invalid TX Percentage: " + String(data));
 						}
 						break;
+		case GPS_ENABLE:
+						if(data != setting.gpsEnabled)
+						{
+							setting.gpsEnabled = data;
+							updatedFlags |= (1<<GPS_ENABLE);
+							eeprom.write(EEPROM_GPS_ENABLED_ADDRESS, data & 0x01);
+							#ifdef DEBUG
+								PC.println("GPS: " + setting.gpsEnabled ? "Enabled" : "Disabled");
+							#endif
+							if(updatePi)
+								piUart->print("G" + String(setting.gpsEnabled));
+						}
+						break;
 		case CALIBRATION: break; //TODO
-		default:		panic(INVALID_SYNC_PARAMETERS); break;	
+		default:		panic(INVALID_SYNC_PARAMETERS, String(type) + ", " + String(data)); break;	
 	};
 }
-int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1*/)
+void supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1*/)
 {
 	int targetArraySize;
 	int *destination;
@@ -540,7 +548,6 @@ int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1
 					destination = bandArray;
 					controlChar = "B";
 					eepromBaseAddress = EEPROM_BAND_BASE_ADDRESS;
-					PC.println("Syncing band");
 					break;
 		case TX_DISABLE:
 					targetArraySize = 12;
@@ -548,7 +555,7 @@ int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1
 					controlChar = "D";
 					eepromBaseAddress = EEPROM_TX_DISABLE_BASE_ADDRESS;
 					break;
-		default:	panic(INVALID_SYNC_PARAMETERS); break;	
+		default:	panic(INVALID_SYNC_PARAMETERS, String(type) + ", " + String(data[0])); break;	
 	};
 	
 	
@@ -584,7 +591,7 @@ int supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=1
 		
 		#ifdef DEBUG
 			PC.println(""); //line feed after band array
-			PC.println(String("Bandhopping: ") + ((setting.bandhop == 1) ? "Yes" : "No"));
+			if(type == BAND) PC.println(String("Bandhopping: ") + ((setting.bandhop == 1) ? "Yes" : "No"));
 		#endif
 		
 		//Set updated flag

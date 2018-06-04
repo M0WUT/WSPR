@@ -48,12 +48,12 @@ class supervisor
 		struct settings_t settings();
 		
 		//Synchronisation functions
-		int sync(String data, data_t type, const bool updatePi = 1);
-		int sync(struct supervisor::settings_t::time_t newTime, data_t type, const bool updatePi = 1);
-		int sync(int data, data_t type, const bool updatePi = 1);
-		int sync(bool data, data_t type, const bool updatePi = 1);
-		int sync(supervisor::dateFormat_t data, supervisor::data_t type, const bool updatePi = 1);
-		int sync(int *data, data_t type, const bool updatePi = 1);
+		void sync(String data, data_t type, const bool updatePi = 1);
+		void sync(struct supervisor::settings_t::time_t newTime, data_t type, const bool updatePi = 1);
+		void sync(int data, data_t type, const bool updatePi = 1);
+		void sync(bool data, data_t type, const bool updatePi = 1);
+		void sync(supervisor::dateFormat_t data, supervisor::data_t type, const bool updatePi = 1);
+		void sync(int *data, data_t type, const bool updatePi = 1);
 		
 		//Used to indicate to main program that something has changed
 		bool updated(supervisor::data_t type);
@@ -100,5 +100,6 @@ class supervisor
 		static const int EEPROM_BAND_BASE_ADDRESS = 19;
 		static const int EEPROM_TX_DISABLE_BASE_ADDRESS = 44;
 		static const int EEPROM_CHECKSUM_BASE_ADDRESS = 56;
+		static const int EEPROM_GPS_ENABLED_ADDRESS = 59;
 };
 #endif
