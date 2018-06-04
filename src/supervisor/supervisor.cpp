@@ -110,7 +110,6 @@ struct supervisor::settings_t supervisor::settings() {return setting;}
 
 void supervisor::background_tasks()
 {
-	PC.println(String("GPS Enabled: ") + (setting.gpsEnabled ? "Yes" : "No") + "\tTimeout: " + (millis() - gpsSyncTime < GPS_TIMEOUT ? "No" : "Yes"));
 	setting.gpsActive = (setting.gpsEnabled && (millis() - gpsSyncTime < GPS_TIMEOUT));
 	setting.piActive = (millis() - piSyncTime < PI_TIMEOUT);
 	
@@ -363,6 +362,12 @@ void supervisor::register_gps_uart(HardwareSerial *uart)
 {
 	gpsUart = uart;
 	gpsUart->begin(9600);
+}
+
+void supervisor::sync(const char *ptr, supervisor::data_t type, const bool updatePi/*=1*/)
+{
+	String data = String(ptr); //Deal with stupid Arduino having it's own String class which does not handle String literals :S
+	sync(data, type, updatePi);
 }
 
 void supervisor::sync(String data, supervisor::data_t type, const bool updatePi/*=1*/)

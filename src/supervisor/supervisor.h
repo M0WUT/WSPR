@@ -51,7 +51,7 @@ class supervisor
 		void sync(String data, data_t type, const bool updatePi = 1);
 		void sync(struct supervisor::settings_t::time_t newTime, data_t type, const bool updatePi = 1);
 		void sync(int data, data_t type, const bool updatePi = 1);
-		void sync(bool data, data_t type, const bool updatePi = 1);
+		void sync(const char *data, supervisor::data_t type, const bool updatePi = 1);
 		void sync(supervisor::dateFormat_t data, supervisor::data_t type, const bool updatePi = 1);
 		void sync(int *data, data_t type, const bool updatePi = 1);
 		
