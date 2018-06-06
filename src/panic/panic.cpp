@@ -63,7 +63,6 @@ void panic(int error)
 		case TIME_SYNC_FAILED: 			uartMessage = "Time Sync Failed"; 									lcdMessage = "   Time Sync         Failed     "; break;
 		case SI5351_DIVIDER_ERROR: 		uartMessage = "Error calculating Si5351 divider"; 					lcdMessage = " Si5351 Divider      Error      "; break;
 		case I2C_NOT_RESPONDING: 		uartMessage = "Si5351 not responding"; 								lcdMessage = "   Si5351 not      responding   "; break;
-		case WEIRD_I2C_ERROR: 			uartMessage = "I2C is unhappy";										lcdMessage = "  Unknown I2C        Error      "; break;
 		case INVALID_CLOCK: 			uartMessage = "Attempted to access Invalid Clock (>2) on Si5351"; 	lcdMessage = "  Si5351 Clock       Error      "; break;
 		case INVALID_PLL:	 			uartMessage = "Attempted to access Invalid PLL on Si5351"; 			lcdMessage = "   Si5351 PLL        Error      "; break;
 		case VCO_ERROR:		 			uartMessage = "VCO set outside valide range of 600-900MHz";			lcdMessage = "   Si5351 VCO        Error      "; break;

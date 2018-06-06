@@ -18,7 +18,7 @@ void supervisor::setup()
 	
 	if( eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS) == 'L' && 
 		eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS+1) == 'I' && 
-		eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS+2) == 'D')
+		eeprom.read(EEPROM_CHECKSUM_BASE_ADDRESS+2) == 'D') 
 	{
 		///////////////////////////////
 		//Load everything from eeprom//
@@ -92,9 +92,9 @@ void supervisor::setup()
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+1, 'I');
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+2, 'D');
 	}
-	//PC.println("before stupid line"); //DEBUG
-	//sync("Data loaded", STATUS); //DEBUG
-	//PC.println("after stupid line"); //DEBUG
+	
+	sync("Data loaded", STATUS); //DEBUG
+	
 	
 	//Make it look like we've synced with Pi to prevent server timeout on startup, want GPS to not be synced to prevent thinking GPS data is valid
 	piSyncTime = millis();
@@ -271,7 +271,7 @@ void supervisor::pi_handler()
 				case 'P':	sync(atoi(data.c_str()), POWER, 0); break; //Convert String to int
 				case 'B':	int temp[24];
 							for(int i = 0; i<24; i++)
-								temp[i] = data[i*2] - '0';
+								temp[i] = data[i*2] > '9' ? data[i*2] - ('A' - 10) : data[i*2] - '0'; //Supplied as ascii hex, convert to int
 							sync(temp, BAND, 0);
 							break;
 				case 'X': 	sync(atoi(data.c_str()), TX_PERCENTAGE, 0); break; //Convert String to int
@@ -604,9 +604,12 @@ void supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=
 		//Update Pi
 		if(updatePi)
 		{
-			piUart->print(controlChar + String(destination[0]));
-			for(int i = 1; i<targetArraySize; i++)
-				piUart->print("," + String(destination[i]));
+			piUart->print(controlChar);
+			for(int i = 0; i<targetArraySize; i++)
+			{	
+				if(i!=0) piUart->print(",");
+				piUart->print(destination[i], HEX);
+			}
 			piUart->print(";\n");
 		}
 	}

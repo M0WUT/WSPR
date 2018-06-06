@@ -159,8 +159,10 @@ void loop()
 			if(!stateInitialised) //This is the first time in this state so draw on the LCD and wait for debounce
 			{
 				ipRequestedTime = millis();
+				//Load stupid data to check when it's been updated
+				//Can't wait for a signal as need to keep going around the loop so the uart handler is called
 				master.sync("8.8.8.8", supervisor::IP);
-				master.sync("deadbeef", supervisor::HOSTNAME); //Load stupid data into master to check when it's updated
+				master.sync("deadbeef", supervisor::HOSTNAME); 
 				master.clearUpdateFlag(supervisor::IP);
 				master.clearUpdateFlag(supervisor::HOSTNAME);
 				RPI.print("I;\n");

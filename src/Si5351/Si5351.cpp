@@ -34,15 +34,7 @@ unsigned int Si5351::bc_solve(double x0, uint64_t &num, uint64_t &den)
 
 void Si5351::stopTransmission()
 {
-	
-	switch(Wire.endTransmission())
-		{
-			case 0: break;
-			case 2: panic(I2C_NOT_RESPONDING); break;
-			default: panic(WEIRD_I2C_ERROR);
-		}
-	
-	
+	if(Wire.endTransmission()) panic(I2C_NOT_RESPONDING);
 }
 
 uint8_t Si5351::I2C_read(uint8_t address)

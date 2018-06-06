@@ -48,9 +48,9 @@
 /////////////////
 
 //These check whether variable is defined rather than value so comment out to disable
-#define DEBUG 1 
-#define OSC_ENABLED 1
-#define SKIP_CALIBRATION 1
+#define DEBUG 
+//#define OSC_ENABLED 
+#define SKIP_CALIBRATION 
 
 
 ///////////////////////
