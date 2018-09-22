@@ -223,7 +223,7 @@ void supervisor::pi_handler()
 				case 'B':	piUart->print("B");
 							for (int i=0; i<23; i++)
 							{
-								piUart->print(bandArray[i]);
+								piUart->print(bandArray[i], HEX);
 								piUart->print(",");
 							}
 							piUart->print(bandArray[23]);
@@ -255,6 +255,7 @@ void supervisor::pi_handler()
 							piUart->print(";\n");
 							break;
 				case 'G':	piUart->print("G" + String(setting.gpsEnabled) + ";\n"); break;
+				case 'M':	break; //DEBUG it's a new command but stops the Pi from crashing
 				case 'A': 	//These should never be sent to the PIC
 							//put in as acknowledgement I haven't forgotten to deal with them
 				default: 	panic(PI_UNKNOWN_CHARACTER, rxString[0] + data); break;
@@ -512,7 +513,6 @@ void supervisor::sync(int *data, supervisor::data_t type, const bool updatePi/*=
 	int targetArraySize;
 	int *destination;
 	int eepromBaseAddress;
-	int maxValue;
 	String controlChar;
 	switch(type)
 	{
