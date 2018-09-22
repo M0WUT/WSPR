@@ -45,7 +45,11 @@ void supervisor::setup()
 			if(x == 0) break;
 			else tempData += x;
 		}
+		tempData.trim();
 		sync(tempData, LOCATOR);
+		
+		//Load GPS Enable
+		sync(eeprom.read(EEPROM_GPS_ENABLED_ADDRESS), GPS_ENABLE);
 		
 		//Load power
 		sync(eeprom.read(EEPROM_POWER_ADDRESS), POWER);
@@ -80,7 +84,8 @@ void supervisor::setup()
 		#endif
 		//EEPROM doesn't contain valid data, use defaults
 		sync("M0WUT", CALLSIGN);
-		sync("GPS", LOCATOR);
+		sync("", LOCATOR);
+		sync(1, GPS_ENABLE);
 		sync(23, POWER);
 		sync(20, TX_PERCENTAGE);
 		sync(BRITISH, DATE_FORMAT);
@@ -88,6 +93,7 @@ void supervisor::setup()
 		sync(defaultBand, BAND);
 		int defaultDisable[12] = {1,1,1,1,1,1,1,1,1,1,1,1}; //TX disabled for all bands
 		sync(defaultDisable, TX_DISABLE);
+
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS, 'L');
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+1, 'I');
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+2, 'D');
@@ -162,14 +168,10 @@ void supervisor::gps_handler()
 	if (gpsUart == NULL) panic(GPS_UART_NOT_REGISTERED);
 	if(setting.gpsActive && gpsUart->available()) //If first expression is false, second expression is not evaluated
 	{
-		PC.println("have stuff");
 		while(gpsUart->available())
 			gps.encode(gpsUart->read());
 		if(gps.location.isValid())
 		{
-			#ifdef DEBUG
-				PC.println("synced valid GPS data");
-			#endif
 			sync(supervisor::settings_t::time_t{gps.date.day(), gps.date.month(), gps.date.year(), gps.time.hour(), gps.time.minute(), gps.time.second()}, TIME); 
 			sync(maidenhead(&gps), LOCATOR);
 		}
@@ -216,7 +218,7 @@ void supervisor::pi_handler()
 				case 'I':	sync(data, IP, 0); break; //actually setting data, for when pi not connected to network so has no IP address
 				case 'H':   sync(data, HOSTNAME, 0); break; //as above with hostname
 				case 'C':	piUart->print("C" + setting.callsign + ";\n"); break;
-				case 'L':	piUart->print("L" + String(setting.gpsEnabled ? "GPS" : setting.locator) + ";\n"); break;
+				case 'L':	piUart->print("L" + setting.locator + ";\n"); break;
 				case 'P':	piUart->print("P" + String(setting.power) + ";\n"); break;
 				case 'B':	piUart->print("B");
 							for (int i=0; i<23; i++)
@@ -252,9 +254,7 @@ void supervisor::pi_handler()
 							piUart->print(txDisableArray[11]);
 							piUart->print(";\n");
 							break;
-				case 'G':	locatorRequested = 1; break;
-							
-							
+				case 'G':	piUart->print("G" + String(setting.gpsEnabled) + ";\n"); break;
 				case 'A': 	//These should never be sent to the PIC
 							//put in as acknowledgement I haven't forgotten to deal with them
 				default: 	panic(PI_UNKNOWN_CHARACTER, rxString[0] + data); break;
@@ -268,6 +268,7 @@ void supervisor::pi_handler()
 				case 'H':	sync(data, HOSTNAME, 0); break;
 				case 'C':	sync(data, CALLSIGN, 0); break;
 				case 'L': 	sync(data, LOCATOR, 0); break;
+				case 'G':	sync(data[0] - '0', GPS_ENABLE, 0); break;
 				case 'P':	sync(atoi(data.c_str()), POWER, 0); break; //Convert String to int
 				case 'B':	int temp[24];
 							for(int i = 0; i<24; i++)
@@ -285,7 +286,6 @@ void supervisor::pi_handler()
 				case 'U': 	//They are put here as acknowledgement that
 				case 'F':	//I haven't forgotten to deal with them
 				case 'A':
-				case 'G':
 				case 'T':
 				default:	panic(PI_UNKNOWN_CHARACTER, rxString[0] + data); break;
 			};		
@@ -375,52 +375,19 @@ void supervisor::sync(String data, supervisor::data_t type, const bool updatePi/
 	switch(type)
 	{
 		case LOCATOR: 	//If we are here the data is a bit dumb, "GPS" means use onboard GPS, anything else is the locator
-						if(data == "GPS")
+						if(data != setting.locator)
 						{
-							if(!setting.gpsEnabled)
-							{
-								setting.gpsEnabled = 1;
-								updatedFlags |= (1<<LOCATOR);
-								#ifdef DEBUG
-									PC.println("Locator: GPS");
-								#endif
-								
-								//Save to EEPROM, zero padding up to 6 characters
+							setting.locator = data;
+							updatedFlags |= (1<<LOCATOR);
+							if(updatePi)
+								piUart->print("L" + setting.locator + ";\n");
+							#ifdef DEBUG
+								PC.println("Locator: " + setting.locator);
+							#endif
+							//Save to EEPROM, zero padding up to 6 characters
 								for(int i = 0; i< 6; i++)
 									eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i < data.length() ? data[i] : 0));
-								
-								if(updatePi)
-								{
-									piUart->print("LGPS;\n");
-									locatorRequested = 1;
-								}
-							}
 						}
-						else
-						{						
-							if((data != setting.locator) || setting.gpsEnabled)
-							{
-								setting.gpsEnabled = 0;
-								updatedFlags |= (1<<LOCATOR);
-								if(!WSPR_encode("M0WUT", data, 23, NULL, WSPR_NORMAL))
-								{
-									setting.locator = data;
-									#ifdef DEBUG
-										PC.println("Locator: " + setting.locator);
-									#endif
-									
-									//Save to EEPROM, zero padding up to 6 characters
-									for(int i = 0; i< 6; i++)
-										eeprom.write(EEPROM_LOCATOR_BASE_ADDRESS + i, (i < data.length() ? data[i] : 0));
-									
-									if(updatePi)
-										//Assume that if the GPS is active that it is the source of the locator
-										piUart->print((setting.gpsActive ? "G" : "L") + setting.locator + ";\n");
-								}
-								else
-									warn("WARNING: Ignoring invalid locator: " + data);
-							}
-						}		
 						break;
 						
 						
@@ -533,7 +500,7 @@ void supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1
 								PC.println("GPS: " + setting.gpsEnabled ? "Enabled" : "Disabled");
 							#endif
 							if(updatePi)
-								piUart->print("G" + String(setting.gpsEnabled));
+								piUart->print("G" + String(setting.gpsEnabled) + ";\n");
 						}
 						break;
 		case CALIBRATION: break; //TODO

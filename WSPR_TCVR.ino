@@ -639,7 +639,7 @@ void loop()
 				osc.set_freq(2,1,2500000.0);
 				lcd.write(0,2, "Calibrating");
 				lcd.write(1,1, "This will take");
-				lcd.write(2,0, "about 160 second");
+				lcd.write(2,1, "about 160 sec");
 				master.clearUpdateFlag(supervisor::TIME);
 				stateInitialised = 1;
 				while(menu_pressed()) delay(50); 
@@ -651,7 +651,7 @@ void loop()
 				master.clearUpdateFlag(supervisor::TIME);
 				i--;
 				lcd.clear_line(2);
-				lcd.write(2, 0, "about " + String(i) + "seconds");
+				lcd.write(2, 1, "about " + String(i) + " sec");
 				master.sync("Calibrating - roughly " + String(i) + " seconds remaining", supervisor::STATUS);
 			}
 			

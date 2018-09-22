@@ -49,7 +49,7 @@
 
 //These check whether variable is defined rather than value so comment out to disable
 #define DEBUG 
-//#define OSC_ENABLED 
+#define OSC_ENABLED 
 #define SKIP_CALIBRATION 
 
 
@@ -57,7 +57,7 @@
 //Configuration stuff//
 ///////////////////////
 #define LCD_CONTRAST 35 //0-63
-#define GPS_TIMEOUT 2000 //Time with no GPS activity before we assume GPS lock has been lost in ms
+#define GPS_TIMEOUT 5000 //Time with no GPS activity before we assume GPS lock has been lost in ms
 #define PI_TIMEOUT 5000 //Pi Timeout in ms
 
 
