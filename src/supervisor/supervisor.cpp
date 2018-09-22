@@ -1,7 +1,7 @@
 #include "supervisor.h"
 //TODO: add filter settings
 
-const String VERSION = "0.1";
+const String VERSION = "0.2";
 supervisor::supervisor() : eeprom(EEPROM_CS){}
 
 void supervisor::setup()
@@ -226,7 +226,7 @@ void supervisor::pi_handler()
 								piUart->print(bandArray[i], HEX);
 								piUart->print(",");
 							}
-							piUart->print(bandArray[23]);
+							piUart->print(bandArray[23], HEX);
 							piUart->print(";\n");
 							break;
 				case 'X':	piUart->print("X" + String(setting.txPercentage) + ";\n"); break;
