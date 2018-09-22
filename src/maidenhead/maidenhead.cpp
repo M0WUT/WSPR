@@ -1,9 +1,9 @@
 #include "maidenhead.h"
-void maidenhead(TinyGPSPlus gps, String &locator)
+String maidenhead(TinyGPSPlus *gps)
 {
-	locator = "      ";
-	double latminutes = 60*(gps.location.lat()*(gps.location.rawLat().negative ? -1.0 : +1.0) + 90.0);
-    double lngminutes = 60*(gps.location.lng()*(gps.location.rawLng().negative ? +1.0 : -1.0) + 180.0); // Very odd but seems to need it to work
+	String locator = "      ";
+	double latminutes = 60*(gps->location.lat()*(gps->location.rawLat().negative ? -1.0 : +1.0) + 90.0);
+    double lngminutes = 60*(gps->location.lng()*(gps->location.rawLng().negative ? -1.0 : +1.0) + 180.0); 
    
     int temp = lngminutes/1200;
     locator[0]=(char)(temp+'A');
@@ -23,4 +23,6 @@ void maidenhead(TinyGPSPlus gps, String &locator)
     locator[4]=(char)(temp+'a');
     temp = (int)(latminutes/2.5);
     locator[5]=(char)(temp+'a');
+	
+	return locator;
 }

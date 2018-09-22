@@ -139,6 +139,14 @@ void DogLcd::reset() {
     leftToRight();
 }
 
+void DogLcd::write(int row, int col, String data)
+{
+	this->setCursor(row, col);
+	this->print(data);
+} 
+
+void DogLcd::clear_line(int row) {this->write(row,0,"                ");}
+
 void DogLcd::setContrast(int contrast) {
     if(contrast<0 || contrast>0x3F)
 	return;

@@ -1,4 +1,3 @@
-#include <DSPI.h>
 #include "LC640.h"
 
 DSPI1 spi;

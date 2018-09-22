@@ -9,6 +9,14 @@
 #include "src/DogLcd/DogLcd.h"
 #include "src/LC640/LC640.h"
 #include "src/maidenhead/maidenhead.h"
+#include "src/supervisor/supervisor.h"
+#include "src/Wire2/Wire2.h"
+
+#if ARDUINO >= 100
+ #include "Arduino.h"
+#else
+ #include "WProgram.h"
+#endif
 
 //////////////////////////////
 //Definitions - DO NOT TOUCH//
@@ -17,7 +25,6 @@
 #define GPS Serial1
 #define PC Serial
 #define RPI Serial0
-#define TIMEOUT 2000 //Timeout for Pi traffic in ms
 #define LED 1
 #define TIMER_ENABLED 1<<15
 #define NO_PRESCALER 0
@@ -36,29 +43,22 @@
 #define TX 6
 
 
-//////////////////////
-//Enabled debug mode//
-//////////////////////
+/////////////////
+//Debug Options//
+/////////////////
 
-#define DEBUG 1 //set to 0 for normal mode
-#define SKIP_CALIBRATION 0
+//These check whether variable is defined rather than value so comment out to disable
+#define DEBUG 
+#define OSC_ENABLED 
+#define SKIP_CALIBRATION 
 
-//////////////////////////////
-//Memory Addresses in EEPROM//
-//////////////////////////////
-#define EEPROM_CALLSIGN_BASE_ADDRESS 0
-#define EEPROM_LOCATOR_BASE_ADDRESS 10
-#define EEPROM_POWER_ADDRESS 16
-#define EEPROM_TX_PERCENTAGE_ADDRESS 17
-#define EEPROM_DATE_FORMAT_ADDRESS 18
-#define EEPROM_BAND_BASE_ADDRESS 19
-#define EEPROM_TX_DISABLE_BASE_ADDRESS 44
 
 ///////////////////////
 //Configuration stuff//
 ///////////////////////
 #define LCD_CONTRAST 35 //0-63
-
+#define GPS_TIMEOUT 5000 //Time with no GPS activity before we assume GPS lock has been lost in ms
+#define PI_TIMEOUT 5000 //Pi Timeout in ms
 
 
 
