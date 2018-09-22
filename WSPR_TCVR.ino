@@ -42,7 +42,6 @@ void setup()
 	digitalWrite(LED, LOW);
 	pinMode(TX, OUTPUT);
 	digitalWrite(TX, LOW);
-	
 
 	T2CON = 0x00;
 	T3CON = 0x00;
@@ -442,6 +441,7 @@ void loop()
 		
 		case TX_PERCENTAGE:
 		{
+
 			static int tempPercentage;
 			if(!stateInitialised)
 			{
@@ -450,6 +450,7 @@ void loop()
 				tempPercentage = master.settings().txPercentage;
 				lcd.write(1,0, String(tempPercentage) +"%");
 				stateInitialised = 1;
+
 				while(menu_pressed()) delay(50);
 				while(edit_pressed()) delay(50); 
 			}
@@ -661,8 +662,6 @@ void loop()
 		} //case CALIBRATING
 		default: panic(INVALID_STATE_ACCESSED, String(state)); break;
 					
-
-
 	}; //end of state machine
 
 } //end of loop
