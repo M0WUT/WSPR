@@ -1,7 +1,7 @@
 #include "supervisor.h"
 //TODO: add filter settings
 
-const String VERSION = "0.6";
+const String VERSION = "0.7";
 supervisor::supervisor() : eeprom(EEPROM_CS){}
 
 void supervisor::setup()
