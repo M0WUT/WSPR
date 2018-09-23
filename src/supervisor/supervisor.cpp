@@ -1,7 +1,7 @@
 #include "supervisor.h"
 //TODO: add filter settings
 
-const String VERSION = "0.5";
+const String VERSION = "0.6";
 supervisor::supervisor() : eeprom(EEPROM_CS){}
 
 void supervisor::setup()
@@ -509,7 +509,7 @@ void supervisor::sync(int data, supervisor::data_t type, const bool updatePi/*=1
 								PC.println("GPS: " + setting.gpsEnabled ? "Enabled" : "Disabled");
 							#endif
 							if(updatePi)
-								piUart->print("G" + String(setting.gpsEnabled) + ";\n");
+								piUart->print("M" + String(setting.gpsEnabled) + ";\n");
 						}
 						break;
 		case CALIBRATION: break; //TODO
