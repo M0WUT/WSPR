@@ -261,7 +261,7 @@ void supervisor::pi_handler()
 							piUart->print(txDisableArray[11]);
 							piUart->print(";\n");
 							break;
-				case 'M':	piUart->print("M" + String(setting.gpsEnabled) + ";\n"); break;
+				case 'M':	piUart->print("M" + (String(setting.gpsEnabled) ? "G" : "L") + ";\n"); break;
 				case 'G':	locatorRequested = 1; break;
 				case 'L':	break; //DEBUG
 				case 'A': 	//These should never be sent to the PIC
