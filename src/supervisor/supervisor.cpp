@@ -37,7 +37,11 @@ void supervisor::setup()
 		}
 		sync(tempData, CALLSIGN);
 		
+		
+		//DEBUG - only support GPS locator so no point saving in EEPROM
+		
 		//Load locator
+		/*
 		tempData = "";
 		for(int i = 0; i < 6; i++)
 		{
@@ -48,8 +52,10 @@ void supervisor::setup()
 		tempData.trim();
 		sync(tempData, LOCATOR);
 		
+		
 		//Load GPS Enable
 		sync(eeprom.read(EEPROM_GPS_ENABLED_ADDRESS), GPS_ENABLE);
+		*/
 		
 		//Load power
 		sync(eeprom.read(EEPROM_POWER_ADDRESS), POWER);
@@ -84,7 +90,6 @@ void supervisor::setup()
 		#endif
 		//EEPROM doesn't contain valid data, use defaults
 		sync("M0WUT", CALLSIGN);
-		sync("", LOCATOR);
 		sync(1, GPS_ENABLE);
 		sync(23, POWER);
 		sync(20, TX_PERCENTAGE);
@@ -99,7 +104,10 @@ void supervisor::setup()
 		eeprom.write(EEPROM_CHECKSUM_BASE_ADDRESS+2, 'D');
 	}
 	
-	sync("Data loaded", STATUS); //DEBUG
+	sync("", LOCATOR); //LOCATOR always set to blank on startup as only currently support GPS locator
+	sync(1, GPS_ENABLE); //Only support GPS mode atm
+	
+	sync("Data loaded", STATUS); 
 	
 	
 	//Make it look like we've synced with Pi to prevent server timeout on startup, want GPS to not be synced to prevent thinking GPS data is valid
@@ -137,7 +145,7 @@ void supervisor::background_tasks()
 		timeRequested = 0;
 	}
 	
-	if(locatorRequested && setting.gpsActive)
+	if(locatorRequested && setting.gpsActive && setting.locator != "")
 	{
 		#ifdef DEBUG
 			PC.println("Sending requested GPS locator: " + setting.locator);
@@ -218,7 +226,6 @@ void supervisor::pi_handler()
 				case 'I':	sync(data, IP, 0); break; //actually setting data, for when pi not connected to network so has no IP address
 				case 'H':   sync(data, HOSTNAME, 0); break; //as above with hostname
 				case 'C':	piUart->print("C" + setting.callsign + ";\n"); break;
-				case 'L':	piUart->print("L" + setting.locator + ";\n"); break;
 				case 'P':	piUart->print("P" + String(setting.power) + ";\n"); break;
 				case 'B':	piUart->print("B");
 							for (int i=0; i<23; i++)
@@ -254,8 +261,9 @@ void supervisor::pi_handler()
 							piUart->print(txDisableArray[11]);
 							piUart->print(";\n");
 							break;
-				case 'G':	piUart->print("G" + String(setting.gpsEnabled) + ";\n"); break;
-				case 'M':	break; //DEBUG it's a new command but stops the Pi from crashing
+				case 'M':	piUart->print("M" + String(setting.gpsEnabled) + ";\n"); break;
+				case 'G':	locatorRequested = 1; break;
+				case 'L':	//Deliberate fallthough to error as don't support non GPS locator yet
 				case 'A': 	//These should never be sent to the PIC
 							//put in as acknowledgement I haven't forgotten to deal with them
 				default: 	panic(PI_UNKNOWN_CHARACTER, rxString[0] + data); break;
@@ -268,8 +276,6 @@ void supervisor::pi_handler()
 				case 'I':	sync(data, IP, 0); break;
 				case 'H':	sync(data, HOSTNAME, 0); break;
 				case 'C':	sync(data, CALLSIGN, 0); break;
-				case 'L': 	sync(data, LOCATOR, 0); break;
-				case 'G':	sync(data[0] - '0', GPS_ENABLE, 0); break;
 				case 'P':	sync(atoi(data.c_str()), POWER, 0); break; //Convert String to int
 				case 'B':	int temp[24];
 							for(int i = 0; i<24; i++)
@@ -282,10 +288,13 @@ void supervisor::pi_handler()
 								dTemp[i] = data[i*2] - '0';	
 							sync(dTemp, TX_DISABLE, 0);
 							break;
-				case 'S': 	//These all fallthrough deliberately
-				case 'V':	//These should not be sent with extra data
-				case 'U': 	//They are put here as acknowledgement that
-				case 'F':	//I haven't forgotten to deal with them
+				case 'L':	//These all fallthrough deliberately
+				case 'G':	//These should not be sent with extra data
+				case 'M':	//They are put here as acknowledgement that
+				case 'S': 	//I haven't forgotten to deal with them
+				case 'V':	
+				case 'U': 	
+				case 'F':	
 				case 'A':
 				case 'T':
 				default:	panic(PI_UNKNOWN_CHARACTER, rxString[0] + data); break;
@@ -375,8 +384,7 @@ void supervisor::sync(String data, supervisor::data_t type, const bool updatePi/
 {
 	switch(type)
 	{
-		case LOCATOR: 	//If we are here the data is a bit dumb, "GPS" means use onboard GPS, anything else is the locator
-						if(data != setting.locator)
+		case LOCATOR: 	if(data != setting.locator)
 						{
 							setting.locator = data;
 							updatedFlags |= (1<<LOCATOR);
