@@ -1,7 +1,7 @@
 #include "supervisor.h"
 //TODO: add filter settings
 
-const String VERSION = "0.3";
+const String VERSION = "0.5";
 supervisor::supervisor() : eeprom(EEPROM_CS){}
 
 void supervisor::setup()
@@ -263,7 +263,7 @@ void supervisor::pi_handler()
 							break;
 				case 'M':	piUart->print("M" + String(setting.gpsEnabled) + ";\n"); break;
 				case 'G':	locatorRequested = 1; break;
-				case 'L':	//Deliberate fallthough to error as don't support non GPS locator yet
+				case 'L':	break; //DEBUG
 				case 'A': 	//These should never be sent to the PIC
 							//put in as acknowledgement I haven't forgotten to deal with them
 				default: 	panic(PI_UNKNOWN_CHARACTER, rxString[0] + data); break;
